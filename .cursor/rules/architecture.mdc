@@ -32,10 +32,12 @@ midi/
 |---|---|---|
 | API framework | Hono | Lightweight, TypeScript-first, native CF Workers support |
 | ORM | Drizzle ORM | First-class D1 support, type-safe, zero overhead |
+| Router | TanStack Router | Type-safe routing, pairs well with TanStack ecosystem |
 | State (frontend) | Zustand | Minimal, works well with WebSocket updates |
 | Styling | TailwindCSS | Dark mode via `class` strategy, utility-first |
 | Validation | Zod | Shared schemas between frontend and backend |
 | Virtualization | @tanstack/react-virtual | Render 10k+ notes without DOM bloat |
+| Password hashing | Web Crypto PBKDF2 | Native to Workers runtime, zero dependency |
 
 ## Database Schema (D1)
 

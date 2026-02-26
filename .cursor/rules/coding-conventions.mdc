@@ -34,7 +34,8 @@ alwaysApply: false
 
 | Thing | Convention | Example |
 |---|---|---|
-| Files | kebab-case | `piano-roll.tsx`, `note-service.ts` |
+| Component files | PascalCase | `PianoRoll.tsx`, `NoteCard.tsx` |
+| Non-component files | kebab-case | `note-service.ts`, `use-notes.ts` |
 | Components | PascalCase | `PianoRoll`, `NoteCard` |
 | Functions/vars | camelCase | `createNote`, `songId` |
 | Constants | UPPER_SNAKE | `MAX_TRACKS`, `MAX_TIME` |
