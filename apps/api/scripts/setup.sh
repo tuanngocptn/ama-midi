@@ -17,7 +17,7 @@ echo "   ✓ Old database deleted"
 # 2. Run migrations to create fresh database
 echo ""
 echo "2. Running migrations..."
-npx wrangler d1 migrations apply ama-midi-db --local
+npx wrangler d1 migrations apply ama-midi-db --local --env dev
 echo "   ✓ Migrations applied"
 
 # 3. Generate & execute seed SQL (no API server needed)

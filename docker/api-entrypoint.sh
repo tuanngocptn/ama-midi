@@ -14,7 +14,7 @@ fi
 
 # 2. Run migrations
 echo "Running database migrations..."
-npx wrangler d1 migrations apply ama-midi-db --local
+npx wrangler d1 migrations apply ama-midi-db --local --env dev
 echo "✓ Migrations applied"
 
 # 3. Optionally seed (pure SQL, no server needed)
@@ -28,4 +28,4 @@ fi
 # 4. Start the API server
 echo ""
 echo "Starting API server..."
-exec npx wrangler dev --ip 0.0.0.0 --port 8787
+exec npx wrangler dev --env dev --ip 0.0.0.0 --port 8787

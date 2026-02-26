@@ -3,14 +3,15 @@ main = "src/index.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
+# ── Production (default — used by `wrangler deploy`) ──
 [vars]
-JWT_SECRET = "change-me-in-production"
-DEV_TOTP_BYPASS = "true"
+DEV_TOTP_BYPASS = "false"
+# JWT_SECRET should be set via: npx wrangler secret put JWT_SECRET
 
 [[d1_databases]]
 binding = "DB"
 database_name = "ama-midi-db"
-database_id = "local"
+database_id = "701c0ff6-c694-447f-968e-6b47cc11a354"
 migrations_dir = "drizzle"
 
 [durable_objects]
@@ -20,4 +21,18 @@ bindings = [
 
 [[migrations]]
 tag = "v1"
-new_classes = ["SongRoom"]
+new_sqlite_classes = ["SongRoom"]
+
+# ── Local dev (used by `wrangler dev`) ──
+[env.dev]
+name = "ama-midi-api-dev"
+
+[env.dev.vars]
+JWT_SECRET = "change-me-in-production"
+DEV_TOTP_BYPASS = "true"
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "ama-midi-db"
+database_id = "local"
+migrations_dir = "drizzle"
