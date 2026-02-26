@@ -1,0 +1,58 @@
+---
+description: TypeScript and React coding standards for the project
+globs: "**/*.{ts,tsx}"
+alwaysApply: false
+---
+
+# Coding Conventions
+
+## TypeScript
+
+- Strict mode enabled (`"strict": true` in tsconfig)
+- Never use `any` -- use `unknown` and narrow, or define proper types
+- Prefer `interface` for object shapes, `type` for unions/intersections
+- Use `as const` for literal tuples and enums
+- Import types with `import type { ... }` when only used as types
+
+## React (apps/web)
+
+- Functional components only, no class components
+- Custom hooks (`use*`) for reusable logic -- colocate in a `hooks/` folder
+- Components in PascalCase files: `PianoRoll.tsx`, `NoteEditor.tsx`
+- Keep components small; extract sub-components when > 100 lines
+- Use Zustand stores in `stores/` -- one store per domain (songs, notes, auth, ws)
+
+## Hono (apps/api)
+
+- Group routes with `app.route('/prefix', subApp)`
+- Middleware as separate files in `middleware/` folder
+- Access D1 and DO bindings via `c.env` (typed via `Env` interface in `types.ts`)
+- Always validate request body with Zod before processing
+- Return consistent JSON: `{ data: T }` on success, `{ error: string, code: string }` on failure
+
+## Naming
+
+| Thing | Convention | Example |
+|---|---|---|
+| Files | kebab-case | `piano-roll.tsx`, `note-service.ts` |
+| Components | PascalCase | `PianoRoll`, `NoteCard` |
+| Functions/vars | camelCase | `createNote`, `songId` |
+| Constants | UPPER_SNAKE | `MAX_TRACKS`, `MAX_TIME` |
+| DB columns | snake_case | `song_id`, `created_at` |
+| API routes | kebab-case | `/api/songs/:id/notes` |
+
+## Error Handling
+
+- Never swallow errors with empty catch blocks
+- API: throw `HTTPException` from Hono with proper status codes
+- Frontend: surface errors to user via toast notifications
+- Log errors with context (operation name, relevant IDs)
+
+## Constants
+
+```typescript
+const MAX_TRACKS = 8;
+const MAX_TIME = 300;
+const TRACK_RANGE = { min: 1, max: 8 } as const;
+const TIME_RANGE = { min: 0, max: 300 } as const;
+```

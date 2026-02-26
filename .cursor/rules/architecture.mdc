@@ -1,0 +1,114 @@
+---
+description: Cloudflare-native architecture, monorepo layout, DB schema, and real-time design
+alwaysApply: true
+---
+
+# Architecture
+
+## Cloudflare Stack
+
+- **Frontend**: Cloudflare Pages (React 18 + Vite + TypeScript)
+- **Backend**: Cloudflare Workers (Hono framework, TypeScript)
+- **Database**: Cloudflare D1 (SQLite-compatible, accessed via Drizzle ORM)
+- **Real-time**: Cloudflare Durable Objects (WebSocket hub per song)
+- **No Node.js server** -- everything runs on Cloudflare's edge
+
+## Monorepo Layout
+
+```
+midi/
+  apps/
+    web/            React 18 + Vite + TailwindCSS (Cloudflare Pages)
+    api/            Hono on Cloudflare Workers + D1 + Durable Objects
+  packages/
+    shared/         Zod schemas, TypeScript types shared between web and api
+  package.json      pnpm workspaces root
+  turbo.json        Turborepo build orchestration
+```
+
+## Key Libraries
+
+| Layer | Library | Why |
+|---|---|---|
+| API framework | Hono | Lightweight, TypeScript-first, native CF Workers support |
+| ORM | Drizzle ORM | First-class D1 support, type-safe, zero overhead |
+| State (frontend) | Zustand | Minimal, works well with WebSocket updates |
+| Styling | TailwindCSS | Dark mode via `class` strategy, utility-first |
+| Validation | Zod | Shared schemas between frontend and backend |
+| Virtualization | @tanstack/react-virtual | Render 10k+ notes without DOM bloat |
+
+## Database Schema (D1)
+
+Five tables: `users`, `songs`, `song_collaborators`, `notes`, `note_events`.
+All IDs are UUIDs stored as TEXT. Timestamps are unix epoch integers.
+Defined via Drizzle ORM in `apps/api/src/db/schema.ts`.
+
+### users
+| Column | Type | Constraints |
+|---|---|---|
+| id | TEXT | PK (UUID) |
+| email | TEXT | NOT NULL, UNIQUE |
+| name | TEXT | NOT NULL |
+| password_hash | TEXT | NOT NULL |
+| created_at | INTEGER | DEFAULT unixepoch() |
+
+### songs
+| Column | Type | Constraints |
+|---|---|---|
+| id | TEXT | PK (UUID) |
+| title | TEXT | NOT NULL |
+| description | TEXT | nullable |
+| owner_id | TEXT | FK -> users.id, NOT NULL |
+| created_at | INTEGER | DEFAULT unixepoch() |
+| updated_at | INTEGER | DEFAULT unixepoch() |
+
+### song_collaborators
+| Column | Type | Constraints |
+|---|---|---|
+| id | TEXT | PK (UUID) |
+| song_id | TEXT | FK -> songs.id CASCADE, NOT NULL |
+| user_id | TEXT | FK -> users.id CASCADE, NOT NULL |
+| role | TEXT | 'editor' or 'viewer', DEFAULT 'editor' |
+| created_at | INTEGER | DEFAULT unixepoch() |
+
+UNIQUE(song_id, user_id). Enables "Shared with me" and collaborator counts.
+
+### notes
+| Column | Type | Constraints |
+|---|---|---|
+| id | TEXT | PK (UUID) |
+| song_id | TEXT | FK -> songs.id CASCADE, NOT NULL |
+| track | INTEGER | NOT NULL, CHECK 1-8 |
+| time | REAL | NOT NULL, CHECK 0-300 |
+| title | TEXT | NOT NULL |
+| description | TEXT | nullable |
+| color | TEXT | NOT NULL, DEFAULT '#3B82F6' |
+| created_at | INTEGER | DEFAULT unixepoch() |
+| updated_at | INTEGER | DEFAULT unixepoch() |
+
+UNIQUE(song_id, track, time) for sequence integrity. Index on song_id.
+
+### note_events (ledger)
+| Column | Type | Constraints |
+|---|---|---|
+| id | TEXT | PK (UUID) |
+| note_id | TEXT | NOT NULL (not FK -- survives note deletion) |
+| song_id | TEXT | FK -> songs.id CASCADE, NOT NULL |
+| user_id | TEXT | FK -> users.id, NOT NULL |
+| action | TEXT | 'CREATE', 'UPDATE', or 'DELETE' |
+| payload | TEXT | JSON snapshot of note state |
+| created_at | INTEGER | DEFAULT unixepoch() |
+
+Index on (song_id, created_at DESC) for paginated history.
+
+## Real-time Architecture
+
+Each song gets its own Durable Object instance (`SongRoom`). When a user opens a song:
+
+1. Frontend opens WebSocket to `/api/songs/:id/ws`
+2. Hono Worker upgrades the connection and proxies to the `SongRoom` DO
+3. DO maintains a list of connected clients
+4. On any note CRUD, the DO broadcasts the event to all connected clients
+5. Frontend Zustand store merges incoming events into local state
+
+Conflict resolution: UNIQUE constraint on (song_id, track, time) prevents true data conflicts. Last-write-wins with server timestamps for concurrent edits to the same note.

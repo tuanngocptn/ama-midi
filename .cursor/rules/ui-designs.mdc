@@ -1,0 +1,63 @@
+---
+description: UI design reference for all screens - mockup images and layout specifications
+globs: "apps/web/**/*.{ts,tsx,css}"
+alwaysApply: false
+---
+
+# UI Design Reference
+
+Reference mockups are in `.cursor/designs/`. Use them when building frontend components.
+
+## 1. Piano Roll Editor (.cursor/designs/ui-mockup-piano-roll-editor.png)
+
+Three-panel layout:
+
+- **Left sidebar** (~220px, bg #1a1a2e): App logo "AMA-MIDI", "+ New Song" button, scrollable song list (title + note count per item, active item highlighted blue), user avatar + name + logout at bottom.
+- **Main area** (flex-1, bg #0d1117): Top toolbar with editable song title, description, action buttons (Save, Share, Undo, Redo). Status bar showing track range, time range, note count, online users. Piano roll grid below.
+- **Right panel** (~280px, bg #1a1a2e, conditional): Appears when a note is selected. "Edit Note" form: Title (text), Description (textarea), Track (dropdown 1-8), Time (number 0-300), Color (swatches). Update (blue) and Delete (red outline) buttons. History section showing ledger entries.
+
+### Piano Roll Grid
+
+- 8 columns labeled "Track 1" through "Track 8"
+- Y-axis: time 0s-300s flowing downward, labels every 10s
+- Background: #0d1117 with subtle grid lines (#1e293b)
+- Notes: colored circles (~20px diameter) at (track, time) intersections
+- Selected note: glowing ring highlight
+- Click empty cell: snap-to-grid note placement
+- Default colors: blue #3B82F6, red #EF4444, green #22C55E, purple #A855F7, yellow #EAB308
+
+## 2. Song Dashboard (.cursor/designs/ui-mockup-song-dashboard.png)
+
+- **Top nav**: Logo left, search bar center, notification + user avatar right
+- **Page header**: "My Songs" title, subtitle, "+ Create New Song" button (blue)
+- **Filter tabs**: All Songs | Shared with me | Recent. Sort dropdown on right.
+- **Card grid** (3 columns, responsive): Each card (#1e293b, rounded) has mini piano roll preview thumbnail, song title (bold white), description (gray), bottom stats row (note count, collaborator count, last modified)
+
+## 3. Login / Register (.cursor/designs/ui-mockup-login.png)
+
+- Centered card (~400px, bg #1a1a2e) on dark background (#0a0a1a)
+- Logo "AMA-MIDI" with music note icon, subtitle "Enterprise MIDI Editor & Collaboration Suite"
+- Tab switcher: Sign In | Sign Up
+- Sign In: email field, password field, "Forgot password?" link, blue "Sign In" button, divider, "Sign in with SSO" outline button
+- Background: faint piano roll grid pattern at low opacity
+
+## Design Tokens
+
+| Token | Value |
+|---|---|
+| bg-primary | #0d1117 |
+| bg-sidebar | #1a1a2e |
+| bg-card | #1e293b |
+| bg-input | #374151 |
+| text-primary | #f9fafb |
+| text-secondary | #9ca3af |
+| accent-blue | #3B82F6 |
+| accent-red | #EF4444 |
+| accent-green | #22C55E |
+| accent-purple | #A855F7 |
+| accent-yellow | #EAB308 |
+| border-grid | #1e293b |
+| border-subtle | #374151 |
+| radius-sm | 6px |
+| radius-md | 8px |
+| radius-lg | 12px |

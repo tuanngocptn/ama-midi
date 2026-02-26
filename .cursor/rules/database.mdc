@@ -1,0 +1,103 @@
+---
+description: D1 database schema, Drizzle ORM patterns, and migration strategy
+globs: "apps/api/src/db/**/*.ts"
+alwaysApply: false
+---
+
+# Database (Cloudflare D1 + Drizzle ORM)
+
+## Drizzle Schema Reference
+
+Schema defined in `apps/api/src/db/schema.ts`. Five tables:
+
+```typescript
+import { sql } from 'drizzle-orm';
+import { sqliteTable, text, integer, real, uniqueIndex, index } from 'drizzle-orm/sqlite-core';
+
+export const users = sqliteTable('users', {
+  id: text('id').primaryKey(),
+  email: text('email').notNull().unique(),
+  name: text('name').notNull(),
+  passwordHash: text('password_hash').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+});
+
+export const songs = sqliteTable('songs', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  description: text('description'),
+  ownerId: text('owner_id').notNull().references(() => users.id),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+});
+
+export const songCollaborators = sqliteTable('song_collaborators', {
+  id: text('id').primaryKey(),
+  songId: text('song_id').notNull().references(() => songs.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  role: text('role', { enum: ['editor', 'viewer'] }).notNull().default('editor'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (table) => ({
+  uniqueCollaborator: uniqueIndex('uq_song_user').on(table.songId, table.userId),
+  userIdx: index('idx_song_collaborators_user').on(table.userId),
+}));
+
+export const notes = sqliteTable('notes', {
+  id: text('id').primaryKey(),
+  songId: text('song_id').notNull().references(() => songs.id, { onDelete: 'cascade' }),
+  track: integer('track').notNull(),
+  time: real('time').notNull(),
+  title: text('title').notNull(),
+  description: text('description'),
+  color: text('color').notNull().default('#3B82F6'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (table) => ({
+  uniquePosition: uniqueIndex('uq_song_track_time').on(table.songId, table.track, table.time),
+  songIdx: index('idx_notes_song_id').on(table.songId),
+}));
+
+export const noteEvents = sqliteTable('note_events', {
+  id: text('id').primaryKey(),
+  noteId: text('note_id').notNull(),
+  songId: text('song_id').notNull().references(() => songs.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id),
+  action: text('action', { enum: ['CREATE', 'UPDATE', 'DELETE'] }).notNull(),
+  payload: text('payload'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (table) => ({
+  songEventIdx: index('idx_note_events_song').on(table.songId, table.createdAt),
+}));
+```
+
+## D1 Patterns
+
+- Access D1 via `c.env.DB` in Hono handlers (typed as `D1Database`)
+- Create Drizzle instance: `const db = drizzle(c.env.DB)`
+- Generate UUIDs with `crypto.randomUUID()` (available in Workers runtime)
+- D1 supports transactions: `await db.batch([...statements])` for atomicity
+- Use `db.batch()` for note create + event insert in a single atomic operation
+
+## Migration Strategy
+
+- Generate migrations: `npx drizzle-kit generate:sqlite`
+- Migrations stored in `apps/api/drizzle/` folder
+- Apply remote: `npx wrangler d1 migrations apply DB_NAME`
+- Apply local: `npx wrangler d1 migrations apply DB_NAME --local`
+
+## Query Patterns
+
+```typescript
+// List songs (owned + shared)
+const owned = db.select().from(songs).where(eq(songs.ownerId, userId));
+const shared = db.select({ song: songs })
+  .from(songCollaborators)
+  .innerJoin(songs, eq(songCollaborators.songId, songs.id))
+  .where(eq(songCollaborators.userId, userId));
+
+// Atomic note creation with ledger entry
+await db.batch([
+  db.insert(notes).values({ id, songId, track, time, title, color }),
+  db.insert(noteEvents).values({ id: eventId, noteId: id, songId, userId, action: 'CREATE', payload: JSON.stringify(noteData) }),
+]);
+```

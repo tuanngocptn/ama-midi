@@ -1,0 +1,108 @@
+---
+description: REST API endpoints, auth flow, WebSocket spec, and error format
+globs: "apps/api/**/*.ts"
+alwaysApply: false
+---
+
+# API Specification
+
+## Base URL
+
+All endpoints prefixed with `/api`. Hosted on Cloudflare Workers.
+
+## Authentication
+
+- **POST /api/auth/register** -- Create account `{ email, name, password }`
+- **POST /api/auth/login** -- Returns `{ token: string }` (JWT, 24h expiry)
+- **POST /api/auth/refresh** -- Refresh JWT token
+
+JWT passed via `Authorization: Bearer <token>` header.
+CSRF protection via double-submit cookie pattern on state-changing requests.
+
+## Songs
+
+| Method | Path | Description |
+|---|---|---|
+| GET | /api/songs | List own songs + shared songs for authenticated user |
+| POST | /api/songs | Create song `{ title, description? }` |
+| GET | /api/songs/:id | Get song by ID (with note count, collaborator count) |
+| PUT | /api/songs/:id | Update song `{ title?, description? }` (owner or editor) |
+| DELETE | /api/songs/:id | Delete song and cascade notes (owner only) |
+
+Query params for GET /api/songs: `?filter=owned|shared|all` (default: all), `?sort=updated_at|created_at` (default: updated_at DESC).
+
+## Song Collaborators
+
+| Method | Path | Description |
+|---|---|---|
+| GET | /api/songs/:id/collaborators | List collaborators for a song |
+| POST | /api/songs/:id/collaborators | Invite user `{ email, role: 'editor'|'viewer' }` (owner only) |
+| PUT | /api/songs/:id/collaborators/:userId | Update role `{ role }` (owner only) |
+| DELETE | /api/songs/:id/collaborators/:userId | Remove collaborator (owner only) |
+
+Access rules: owner has full access, `editor` can CRUD notes, `viewer` can only read.
+
+## Notes
+
+| Method | Path | Description |
+|---|---|---|
+| GET | /api/songs/:id/notes | List all notes for a song |
+| POST | /api/songs/:id/notes | Create note `{ title, track, time, color?, description? }` |
+| PUT | /api/songs/:id/notes/:noteId | Update note fields |
+| DELETE | /api/songs/:id/notes/:noteId | Delete note |
+
+### Note Constraints
+
+- `track`: integer, 1-8
+- `time`: float, 0.0-300.0
+- `color`: hex string, default `#3B82F6`
+- Unique constraint: one note per (song_id, track, time) -- returns 409 on conflict
+
+## Note History (Ledger)
+
+| Method | Path | Description |
+|---|---|---|
+| GET | /api/songs/:id/history | List note events for a song (event sourcing ledger) |
+
+Every note create/update/delete writes a row to `note_events` with the action and a JSON snapshot.
+
+## WebSocket (Real-time)
+
+- **GET /api/songs/:id/ws** -- Upgrade to WebSocket, proxied to SongRoom Durable Object
+
+### Messages (server -> client)
+
+```json
+{ "type": "note:created", "data": { ...note } }
+{ "type": "note:updated", "data": { ...note } }
+{ "type": "note:deleted", "data": { "id": "..." } }
+{ "type": "user:joined", "data": { "userId": "...", "name": "..." } }
+{ "type": "user:left", "data": { "userId": "..." } }
+```
+
+### Messages (client -> server)
+
+```json
+{ "type": "note:create", "data": { "title": "...", "track": 1, "time": 5.0 } }
+{ "type": "note:update", "data": { "id": "...", "title": "..." } }
+{ "type": "note:delete", "data": { "id": "..." } }
+```
+
+## Rate Limiting
+
+- Auth endpoints: 10 requests/minute per IP
+- CRUD endpoints: 100 requests/minute per user
+- WebSocket: 60 messages/minute per connection
+
+## Error Response Format
+
+All errors return:
+
+```json
+{
+  "error": "Human-readable message",
+  "code": "MACHINE_READABLE_CODE"
+}
+```
+
+Common codes: `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `VALIDATION_ERROR`, `RATE_LIMITED`, `INTERNAL_ERROR`.

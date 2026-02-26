@@ -1,0 +1,38 @@
+---
+description: AMA-MIDI project requirements and scoring criteria - always loaded for context
+alwaysApply: true
+---
+
+# AMA-MIDI Project Brief
+
+## Context
+
+Amanotes needs a web-based internal tool to prototype MIDI sequences (piano-roll style) for game soundtracks. The tool visualizes notes across 8 tracks, with time flowing vertically (0s at top, 300s max at bottom).
+
+## Use Cases
+
+1. **Piano Roll Visualization**: Grid where X-axis = 8 Tracks, Y-axis = Time (0-300s). Notes rendered as circular points at precise (track, time) coordinates.
+2. **Note Management**: CRUD operations on notes with properties: Title, Description, Track (1-8), Time (0-300), and Color.
+3. **Sequence Integrity**: Prevent duplicate notes at the same (track, time) position.
+4. **Collaborative Sequencing**: Multiple composers on the same Song, synchronized without double-writing or state corruption.
+
+## Scoring Target: 90 / 100
+
+| Category | Pts | Key Requirements |
+|---|---|---|
+| Foundation | 20 | CRUD for Songs/Notes, DB persistence, functional UI |
+| Architecture | 10 | Clean React components, TypeScript, relational DB for Note/Song |
+| Visualization & Integrity | 10 | Accurate piano roll grid, tests for positioning, atomic transactions |
+| Security & Auth | 10 | Rate limiting, CSRF protection, SSO/OIDC or 2FA |
+| UI/UX Excellence | 10 | Dark mode studio UI, responsive, snap-to-grid interactions |
+| Advanced Backend | 10 | Real-time updates via WebSockets so multiple users see changes instantly |
+| DevOps & Cloud | 10 | Dockerized, CI/CD pipeline, production hosting |
+| Performance | 10 | Render 10,000+ notes efficiently, performance testing plan |
+| ~~AI Innovation~~ | ~~10~~ | Skipped |
+
+## Output Checklist
+
+- Monorepo with clear `/apps/web` and `/apps/api` structure
+- Ledger logic: MIDI changes tracked as a history of events (event sourcing)
+- README with setup instructions, architectural diagrams, and trade-offs
+- Test suite: conflict test (duplicate track+time), boundary test (time > 300s), performance test
