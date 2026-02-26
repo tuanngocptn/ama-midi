@@ -90,8 +90,22 @@ export const wsClientMessageSchema = z.discriminatedUnion('type', [
 
 export const noteEventActionSchema = z.enum(NOTE_ACTIONS);
 
+// --- 2FA ---
+
+export const login2faSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+  code: z.string().length(6),
+});
+
+export const verify2faCodeSchema = z.object({
+  code: z.string().length(6),
+});
+
 // --- Type exports ---
 
+export type Login2faInput = z.infer<typeof login2faSchema>;
+export type Verify2faCodeInput = z.infer<typeof verify2faCodeSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type CreateSongInput = z.infer<typeof createSongSchema>;

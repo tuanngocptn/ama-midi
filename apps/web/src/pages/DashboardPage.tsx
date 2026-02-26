@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useAuthStore } from '@/stores/auth-store';
 import { useSongStore } from '@/stores/song-store';
 import { CreateSongModal } from '@/components/CreateSongModal';
+import { TwoFactorModal } from '@/components/TwoFactorModal';
 import type { Song } from '@ama-midi/shared';
 
 type FilterTab = 'all' | 'shared' | 'recent';
@@ -312,6 +313,7 @@ export function DashboardPage() {
 
   const [renamingSong, setRenamingSong] = React.useState<Song | null>(null);
   const [deletingSong, setDeletingSong] = React.useState<Song | null>(null);
+  const [twoFactorOpen, setTwoFactorOpen] = React.useState(false);
 
   const sortDropdownRef = React.useRef<HTMLDivElement>(null);
   const userMenuRef = React.useRef<HTMLDivElement>(null);
@@ -437,6 +439,13 @@ export function DashboardPage() {
             </button>
             {userMenuOpen && (
               <div className="absolute right-0 z-30 mt-1 w-40 rounded-md border border-border-subtle bg-sidebar py-1 shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => { setUserMenuOpen(false); setTwoFactorOpen(true); }}
+                  className="block w-full px-3 py-1.5 text-left text-sm text-text-secondary hover:bg-card hover:text-text-primary"
+                >
+                  Security
+                </button>
                 <button
                   type="button"
                   onClick={() => { setUserMenuOpen(false); logout(); }}
@@ -576,6 +585,9 @@ export function DashboardPage() {
           onClose={() => setDeletingSong(null)}
           onConfirm={handleDeleteSong}
         />
+      )}
+      {twoFactorOpen && (
+        <TwoFactorModal onClose={() => setTwoFactorOpen(false)} />
       )}
     </div>
   );

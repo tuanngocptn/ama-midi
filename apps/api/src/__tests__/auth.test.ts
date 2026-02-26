@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { request, createTestUser } from './helpers';
+import { request, createTestUser, enable2faForUser } from './helpers';
 
 describe('Auth Routes', () => {
   describe('POST /api/auth/register', () => {
@@ -66,6 +66,83 @@ describe('Auth Routes', () => {
         body: { email, password: 'password123' },
       });
       expect(res.status).toBe(401);
+    });
+
+    it('returns requires2fa when 2FA is enabled', async () => {
+      const user = await createTestUser();
+      await enable2faForUser(user.id);
+
+      const res = await request('POST', '/api/auth/login', {
+        body: { email: user.email, password: user.password },
+      });
+      expect(res.status).toBe(200);
+      const json = await res.json() as { data: { requires2fa: boolean } };
+      expect(json.data.requires2fa).toBe(true);
+    });
+  });
+
+  describe('POST /api/auth/login/2fa', () => {
+    it('rejects invalid 2FA code with 401', async () => {
+      const user = await createTestUser();
+      await enable2faForUser(user.id);
+
+      const res = await request('POST', '/api/auth/login/2fa', {
+        body: { email: user.email, password: user.password, code: '000000' },
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it('rejects wrong password even with code', async () => {
+      const user = await createTestUser();
+      await enable2faForUser(user.id);
+
+      const res = await request('POST', '/api/auth/login/2fa', {
+        body: { email: user.email, password: 'wrongpass123', code: '123456' },
+      });
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe('2FA setup endpoints', () => {
+    it('POST /api/auth/2fa/setup returns secret and URI', async () => {
+      const user = await createTestUser();
+      const res = await request('POST', '/api/auth/2fa/setup', { token: user.token });
+      expect(res.status).toBe(200);
+      const json = await res.json() as { data: { secret: string; uri: string } };
+      expect(json.data.secret).toBeDefined();
+      expect(json.data.uri).toContain('otpauth://totp/');
+      expect(json.data.uri).toContain(encodeURIComponent(user.email));
+    });
+
+    it('POST /api/auth/2fa/verify-setup rejects invalid code', async () => {
+      const user = await createTestUser();
+      await request('POST', '/api/auth/2fa/setup', { token: user.token });
+      const res = await request('POST', '/api/auth/2fa/verify-setup', {
+        token: user.token,
+        body: { code: '000000' },
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it('POST /api/auth/2fa/disable disables 2FA', async () => {
+      const user = await createTestUser();
+      await enable2faForUser(user.id);
+
+      const res = await request('POST', '/api/auth/2fa/disable', { token: user.token });
+      expect(res.status).toBe(200);
+      const json = await res.json() as { data: { enabled: boolean } };
+      expect(json.data.enabled).toBe(false);
+
+      const loginRes = await request('POST', '/api/auth/login', {
+        body: { email: user.email, password: user.password },
+      });
+      const loginJson = await loginRes.json() as { data: { token?: string } };
+      expect(loginJson.data.token).toBeDefined();
+    });
+
+    it('rejects setup without auth', async () => {
+      const res = await request('POST', '/api/auth/2fa/setup');
+      expect([401, 429]).toContain(res.status);
     });
   });
 

@@ -1,8 +1,10 @@
+import { eq } from 'drizzle-orm';
 import app from '../index';
 import { drizzle } from 'drizzle-orm/d1';
 import { users } from '../db/schema';
 import { hashPassword } from '../lib/password';
 import { createToken } from '../lib/jwt';
+import { generateSecret } from '../services/totp-service';
 import { env } from 'cloudflare:test';
 
 export function getDb() {
@@ -65,4 +67,14 @@ export async function getCsrfToken(token: string): Promise<string> {
   const cookie = res.headers.get('Set-Cookie') ?? '';
   const match = cookie.match(/csrf_token=([^;]+)/);
   return match?.[1] ?? '';
+}
+
+export async function enable2faForUser(userId: string): Promise<string> {
+  const db = getDb();
+  const secret = generateSecret();
+  await db
+    .update(users)
+    .set({ totpSecret: secret, totpEnabled: 1 })
+    .where(eq(users.id, userId));
+  return secret;
 }

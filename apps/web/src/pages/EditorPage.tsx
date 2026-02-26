@@ -1,5 +1,6 @@
 import React from 'react';
 import { useParams, useNavigate } from '@tanstack/react-router';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useAuthStore } from '@/stores/auth-store';
 import { useSongStore } from '@/stores/song-store';
 import { useNoteStore } from '@/stores/note-store';
@@ -176,6 +177,8 @@ function NotePanel({
   );
 }
 
+const ROW_HEIGHT = 40;
+
 function PianoGrid({
   notes,
   selectedNoteId,
@@ -187,6 +190,8 @@ function PianoGrid({
   onCellClick: (track: number, time: number) => void;
   onNoteClick: (note: Note) => void;
 }) {
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+
   const noteMap = React.useMemo(() => {
     const map = new Map<string, Note>();
     for (const n of notes) {
@@ -195,50 +200,71 @@ function PianoGrid({
     return map;
   }, [notes]);
 
+  const rowVirtualizer = useVirtualizer({
+    count: TIME_STEPS.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 5,
+  });
+
   const snapToStep = (time: number) => Math.round(time / TIME_STEP) * TIME_STEP;
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="inline-flex min-w-full">
-        <div className="sticky left-0 z-10 w-14 shrink-0 bg-primary">
-          <div className="h-10 border-b border-border-grid" />
-          {TIME_STEPS.map((t) => (
-            <div key={t} className="flex h-10 items-center justify-end pr-2 text-xs text-text-secondary">
-              {t}s
-            </div>
-          ))}
-        </div>
-
+    <div ref={scrollRef} className="flex-1 overflow-auto">
+      {/* Track headers (sticky top) */}
+      <div className="sticky top-0 z-20 flex">
+        <div className="w-14 shrink-0 border-b border-border-grid bg-primary" />
         {TRACKS.map((track) => (
-          <div key={track} className="min-w-[100px] flex-1">
-            <div className="sticky top-0 z-10 flex h-10 items-center justify-center border-b border-l border-border-grid bg-sidebar text-xs font-medium text-text-secondary">
-              Track {track}
-            </div>
-            {TIME_STEPS.map((time) => {
-              const note = noteMap.get(`${track}:${time}`);
-              const isSelected = note?.id === selectedNoteId;
-              return (
-                <div
-                  key={time}
-                  onClick={() => note ? onNoteClick(note) : onCellClick(track, snapToStep(time))}
-                  className="flex h-10 cursor-pointer items-center justify-center border-b border-l border-border-grid transition-colors hover:bg-card/40"
-                >
-                  {note && (
-                    <div
-                      className="h-6 w-6 rounded-full transition-shadow"
-                      style={{
-                        backgroundColor: note.color,
-                        boxShadow: isSelected
-                          ? `0 0 0 3px rgba(6,182,212,0.5), 0 0 12px ${note.color}`
-                          : 'none',
-                      }}
-                    />
-                  )}
-                </div>
-              );
-            })}
+          <div
+            key={track}
+            className="flex h-10 min-w-[100px] flex-1 items-center justify-center border-b border-l border-border-grid bg-sidebar text-xs font-medium text-text-secondary"
+          >
+            Track {track}
           </div>
         ))}
+      </div>
+
+      {/* Virtualized rows */}
+      <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
+        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+          const time = TIME_STEPS[virtualRow.index]!;
+          return (
+            <div
+              key={virtualRow.key}
+              className="absolute left-0 flex w-full"
+              style={{ top: virtualRow.start, height: ROW_HEIGHT }}
+            >
+              {/* Time label (sticky left) */}
+              <div className="sticky left-0 z-10 flex w-14 shrink-0 items-center justify-end border-b border-border-grid bg-primary pr-2 text-xs text-text-secondary">
+                {time}s
+              </div>
+              {/* Track cells */}
+              {TRACKS.map((track) => {
+                const note = noteMap.get(`${track}:${time}`);
+                const isSelected = note?.id === selectedNoteId;
+                return (
+                  <div
+                    key={track}
+                    onClick={() => note ? onNoteClick(note) : onCellClick(track, snapToStep(time))}
+                    className="flex min-w-[100px] flex-1 cursor-pointer items-center justify-center border-b border-l border-border-grid transition-colors hover:bg-card/40"
+                  >
+                    {note && (
+                      <div
+                        className="h-6 w-6 rounded-full transition-shadow"
+                        style={{
+                          backgroundColor: note.color,
+                          boxShadow: isSelected
+                            ? `0 0 0 3px rgba(6,182,212,0.5), 0 0 12px ${note.color}`
+                            : 'none',
+                        }}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

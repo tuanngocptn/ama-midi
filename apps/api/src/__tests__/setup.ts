@@ -7,6 +7,8 @@ const STATEMENTS = [
     email text NOT NULL,
     name text NOT NULL,
     password_hash text NOT NULL,
+    totp_secret text,
+    totp_enabled integer DEFAULT 0 NOT NULL,
     created_at integer DEFAULT (unixepoch()) NOT NULL
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users (email)`,
