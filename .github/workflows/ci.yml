@@ -118,7 +118,9 @@ jobs:
         run: pnpm --filter @ama-midi/api run deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Deploy Web to Cloudflare Pages
         run: pnpm --filter @ama-midi/web run build && npx wrangler pages deploy apps/web/dist --project-name=ama-midi
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
