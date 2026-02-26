@@ -226,18 +226,18 @@ async function main() {
   interface SongInfo { id: string; ownerIdx: number; noteTarget: number; title: string }
   const songs: SongInfo[] = [];
 
-  // 5 "heavy" songs with 1500+ notes, one per user
-  const heavySongIndices = [0, 10, 20, 30, 40];
-  const heavyNoteCounts = [1500, 1600, 1700, 1500, 1800];
+  // 5 "extra-heavy" songs with 5000+ notes, one per user
+  const extraHeavyIndices = [0, 10, 20, 30, 40];
+  const extraHeavyCounts = [5000, 5200, 5500, 5100, 5300];
 
   for (let i = 0; i < 50; i++) {
     const ownerIdx = i % 5;
     const auth = auths[ownerIdx]!;
     const title = SONG_TITLES[i]!;
-    const isHeavy = heavySongIndices.includes(i);
-    const noteTarget = isHeavy
-      ? heavyNoteCounts[heavySongIndices.indexOf(i)]!
-      : Math.floor(Math.random() * 30) + 5;
+    const isExtraHeavy = extraHeavyIndices.includes(i);
+    const noteTarget = isExtraHeavy
+      ? extraHeavyCounts[extraHeavyIndices.indexOf(i)]!
+      : 1500 + Math.floor(Math.random() * 500);
 
     try {
       const song = (await api('POST', '/songs', {
@@ -247,7 +247,7 @@ async function main() {
       })) as { id: string };
 
       songs.push({ id: song.id, ownerIdx, noteTarget, title });
-      const tag = isHeavy ? ` [${noteTarget} notes]` : '';
+      const tag = isExtraHeavy ? ` [${noteTarget} notes]` : '';
       console.log(`  ✓ #${i + 1} "${title}" by ${USERS[ownerIdx]!.name}${tag}`);
     } catch {
       console.log(`  ⚠ #${i + 1} "${title}" — failed to create`);
