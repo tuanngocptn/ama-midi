@@ -1,6 +1,6 @@
 import type { ApiSuccess, ApiError } from '@ama-midi/shared';
 
-const BASE = '/api';
+const BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 class ApiClient {
   private token: string | null = null;
