@@ -9,6 +9,7 @@ const makeNote = (overrides: Partial<Note> = {}): Note => ({
   id: 'note-1',
   songId: 'song-1',
   track: 1,
+  pitch: 0,
   time: 10,
   title: 'Test Note',
   description: null,
@@ -69,6 +70,7 @@ describe('useNoteStore', () => {
 
       await useNoteStore.getState().createNote('song-1', {
         track: 1,
+        pitch: 0,
         time: 10,
         title: 'New',
         color: '#3B82F6',
@@ -76,6 +78,7 @@ describe('useNoteStore', () => {
 
       expect(mockedApi.post).toHaveBeenCalledWith('/songs/song-1/notes', {
         track: 1,
+        pitch: 0,
         time: 10,
         title: 'New',
         color: '#3B82F6',
@@ -89,6 +92,7 @@ describe('useNoteStore', () => {
       await expect(
         useNoteStore.getState().createNote('song-1', {
           track: 1,
+          pitch: 0,
           time: 0,
           title: 'X',
           color: '#000',
@@ -108,7 +112,7 @@ describe('useNoteStore', () => {
       await useNoteStore.getState().updateNote('song-1', 'note-1', { title: 'Updated' });
 
       expect(mockedApi.put).toHaveBeenCalledWith('/songs/song-1/notes/note-1', { title: 'Updated' });
-      expect(useNoteStore.getState().notes[0].title).toBe('Updated');
+      expect(useNoteStore.getState().notes[0]!.title).toBe('Updated');
       expect(useNoteStore.getState().selectedNote?.title).toBe('Updated');
     });
   });
@@ -175,7 +179,7 @@ describe('useNoteStore', () => {
 
       useNoteStore.getState().applyWsMessage(msg);
 
-      expect(useNoteStore.getState().notes[0].title).toBe('WS Updated');
+      expect(useNoteStore.getState().notes[0]!.title).toBe('WS Updated');
       expect(useNoteStore.getState().selectedNote?.title).toBe('WS Updated');
     });
 

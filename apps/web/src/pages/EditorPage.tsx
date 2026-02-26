@@ -481,7 +481,7 @@ export function EditorPage() {
     function connect() {
       if (!alive) return;
       const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const url = `${proto}://${window.location.host}/api/ws/${songId}/ws?token=${encodeURIComponent(token)}`;
+      const url = `${proto}://${window.location.host}/api/ws/${songId}/ws?token=${encodeURIComponent(token!)}`;
       ws = new WebSocket(url);
 
       ws.addEventListener('message', (e) => {

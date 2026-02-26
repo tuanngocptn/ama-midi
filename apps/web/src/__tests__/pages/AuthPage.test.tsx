@@ -33,7 +33,7 @@ describe('AuthPage', () => {
     render(<AuthPage />);
 
     const tabButtons = screen.getAllByRole('button', { name: 'Sign Up' });
-    await user.click(tabButtons[0]);
+    await user.click(tabButtons[0]!);
 
     expect(screen.getByLabelText('Name')).toBeInTheDocument();
   });
@@ -60,7 +60,7 @@ describe('AuthPage', () => {
     render(<AuthPage />);
 
     const tabButtons = screen.getAllByRole('button', { name: 'Sign Up' });
-    await user.click(tabButtons[0]);
+    await user.click(tabButtons[0]!);
     await user.type(screen.getByLabelText('Email'), 'a@b.com');
     await user.type(screen.getByLabelText('Name'), 'Alice');
     await user.type(screen.getByLabelText('Password'), 'pass');
@@ -112,7 +112,7 @@ describe('AuthPage', () => {
 
     await user.type(screen.getByLabelText('Email'), 'test@test.com');
     const tabButtons = screen.getAllByRole('button', { name: 'Sign Up' });
-    await user.click(tabButtons[0]);
+    await user.click(tabButtons[0]!);
 
     expect(screen.getByLabelText('Email')).toHaveValue('');
   });

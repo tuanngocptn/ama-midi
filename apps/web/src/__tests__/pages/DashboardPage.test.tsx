@@ -112,7 +112,7 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
 
     const createButtons = screen.getAllByRole('button', { name: /create new song/i });
-    await user.click(createButtons[0]);
+    await user.click(createButtons[0]!);
 
     const modal = screen.getByText('Create New Song').closest('form')!;
     const titleInput = within(modal).getByPlaceholderText('My awesome MIDI');
@@ -142,7 +142,7 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
 
     const searchInputs = screen.getAllByPlaceholderText('Search songs...');
-    await user.type(searchInputs[0], 'Boss');
+    await user.type(searchInputs[0]!, 'Boss');
 
     expect(screen.getByText('Boss Battle')).toBeInTheDocument();
     expect(screen.queryByText('Menu Theme')).not.toBeInTheDocument();

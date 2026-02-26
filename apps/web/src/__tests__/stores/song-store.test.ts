@@ -108,7 +108,7 @@ describe('useSongStore', () => {
       await useSongStore.getState().updateSong('song-1', { title: 'Updated' });
 
       expect(mockedApi.put).toHaveBeenCalledWith('/songs/song-1', { title: 'Updated' });
-      expect(useSongStore.getState().songs[0].title).toBe('Updated');
+      expect(useSongStore.getState().songs[0]!.title).toBe('Updated');
       expect(useSongStore.getState().currentSong?.title).toBe('Updated');
     });
   });
