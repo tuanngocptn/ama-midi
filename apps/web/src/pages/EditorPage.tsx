@@ -480,9 +480,17 @@ export function EditorPage() {
 
     function connect() {
       if (!alive) return;
-      const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const url = `${proto}://${window.location.host}/api/ws/${songId}/ws?token=${encodeURIComponent(token!)}`;
-      ws = new WebSocket(url);
+      const apiBase = import.meta.env.VITE_API_BASE_URL || '';
+      let wsUrl: string;
+      if (apiBase) {
+        const parsed = new URL(apiBase);
+        const proto = parsed.protocol === 'https:' ? 'wss' : 'ws';
+        wsUrl = `${proto}://${parsed.host}/api/ws/${songId}/ws?token=${encodeURIComponent(token!)}`;
+      } else {
+        const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        wsUrl = `${proto}://${window.location.host}/api/ws/${songId}/ws?token=${encodeURIComponent(token!)}`;
+      }
+      ws = new WebSocket(wsUrl);
 
       ws.addEventListener('message', (e) => {
         try {
