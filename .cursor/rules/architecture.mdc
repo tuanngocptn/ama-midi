@@ -19,9 +19,16 @@ alwaysApply: true
 midi/
   apps/
     web/            React 18 + Vite + TailwindCSS (Cloudflare Pages)
+      Dockerfile    Multi-stage nginx build
     api/            Hono on Cloudflare Workers + D1 + Durable Objects
+      Dockerfile    Dev container (wrangler)
+      scripts/      Seed scripts, setup.sh
   packages/
-    shared/         Zod schemas, TypeScript types shared between web and api
+    shared/         Zod schemas, TypeScript types, constants, pitch helpers
+  docker/
+    api-entrypoint.sh  Docker entrypoint for API container
+    nginx.conf         Nginx config for web container
+  docker-compose.yml
   package.json      pnpm workspaces root
   turbo.json        Turborepo build orchestration
 ```
@@ -37,7 +44,10 @@ midi/
 | Styling | TailwindCSS | Dark mode via `class` strategy, utility-first |
 | Validation | Zod | Shared schemas between frontend and backend |
 | Virtualization | @tanstack/react-virtual | Render 10k+ notes without DOM bloat |
+| Audio | Web Audio API | Triangle-wave synthesis with ADSR envelopes, BPM-driven playback |
+| 2FA | qrcode.react + custom TOTP | QR code display, TOTP verification |
 | Password hashing | Web Crypto PBKDF2 | Native to Workers runtime, zero dependency |
+| Local seeding | better-sqlite3 | Direct SQLite writes for fast local database seeding |
 
 ## Database Schema (D1)
 
@@ -52,6 +62,8 @@ Defined via Drizzle ORM in `apps/api/src/db/schema.ts`.
 | email | TEXT | NOT NULL, UNIQUE |
 | name | TEXT | NOT NULL |
 | password_hash | TEXT | NOT NULL |
+| totp_secret | TEXT | nullable |
+| totp_enabled | INTEGER | NOT NULL, DEFAULT 0 |
 | created_at | INTEGER | DEFAULT unixepoch() |
 
 ### songs
@@ -80,15 +92,16 @@ UNIQUE(song_id, user_id). Enables "Shared with me" and collaborator counts.
 |---|---|---|
 | id | TEXT | PK (UUID) |
 | song_id | TEXT | FK -> songs.id CASCADE, NOT NULL |
-| track | INTEGER | NOT NULL, CHECK 1-8 |
-| time | REAL | NOT NULL, CHECK 0-300 |
+| track | INTEGER | NOT NULL |
+| pitch | INTEGER | NOT NULL, DEFAULT 0 (0–87 for 88 piano keys) |
+| time | REAL | NOT NULL (beat position, 0–300) |
 | title | TEXT | NOT NULL |
 | description | TEXT | nullable |
 | color | TEXT | NOT NULL, DEFAULT '#3B82F6' |
 | created_at | INTEGER | DEFAULT unixepoch() |
 | updated_at | INTEGER | DEFAULT unixepoch() |
 
-UNIQUE(song_id, track, time) for sequence integrity. Index on song_id.
+UNIQUE(song_id, track, pitch, time) for sequence integrity. Index on song_id.
 
 ### note_events (ledger)
 | Column | Type | Constraints |
@@ -107,10 +120,24 @@ Index on (song_id, created_at DESC) for paginated history.
 
 Each song gets its own Durable Object instance (`SongRoom`). When a user opens a song:
 
-1. Frontend opens WebSocket to `/api/songs/:id/ws`
-2. Hono Worker upgrades the connection and proxies to the `SongRoom` DO
+1. Frontend opens WebSocket to `/api/ws/:songId/ws?token=<JWT>`
+2. Hono Worker verifies the JWT and proxies to the `SongRoom` DO
 3. DO maintains a list of connected clients
 4. On any note CRUD, the DO broadcasts the event to all connected clients
 5. Frontend Zustand store merges incoming events into local state
 
-Conflict resolution: UNIQUE constraint on (song_id, track, time) prevents true data conflicts. Last-write-wins with server timestamps for concurrent edits to the same note.
+Conflict resolution: UNIQUE constraint on (song_id, track, pitch, time) prevents data conflicts. Last-write-wins with server timestamps for concurrent edits to the same note.
+
+## Wrangler Configuration
+
+Single `wrangler.toml` with environment-based config:
+- **Default (production)**: Used by `wrangler deploy`. D1 points to remote database. `JWT_SECRET` set via `wrangler secret put`.
+- **`env.dev` (local)**: Used by `wrangler dev --env dev`. D1 uses local SQLite. `DEV_TOTP_BYPASS=true` for development.
+
+## Cross-Origin Deployment
+
+Frontend (Cloudflare Pages) and API (Cloudflare Workers) run on different domains:
+- CSRF middleware skips validation when `Authorization: Bearer` token is present
+- API base URL configurable via `VITE_API_BASE_URL` environment variable
+- WebSocket URL derived from `VITE_API_BASE_URL` in production, `window.location.host` in dev
+- CORS configured for both `localhost:5173` and `ama-midi.pages.dev`

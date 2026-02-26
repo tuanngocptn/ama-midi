@@ -19,6 +19,8 @@ export const users = sqliteTable('users', {
   email: text('email').notNull().unique(),
   name: text('name').notNull(),
   passwordHash: text('password_hash').notNull(),
+  totpSecret: text('totp_secret'),
+  totpEnabled: integer('totp_enabled').notNull().default(0),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
 
@@ -46,6 +48,7 @@ export const notes = sqliteTable('notes', {
   id: text('id').primaryKey(),
   songId: text('song_id').notNull().references(() => songs.id, { onDelete: 'cascade' }),
   track: integer('track').notNull(),
+  pitch: integer('pitch').notNull().default(0),
   time: real('time').notNull(),
   title: text('title').notNull(),
   description: text('description'),
@@ -53,7 +56,7 @@ export const notes = sqliteTable('notes', {
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 }, (table) => ({
-  uniquePosition: uniqueIndex('uq_song_track_time').on(table.songId, table.track, table.time),
+  uniquePosition: uniqueIndex('uq_song_track_pitch_time').on(table.songId, table.track, table.pitch, table.time),
   songIdx: index('idx_notes_song_id').on(table.songId),
 }));
 
@@ -80,10 +83,20 @@ export const noteEvents = sqliteTable('note_events', {
 
 ## Migration Strategy
 
-- Generate migrations: `npx drizzle-kit generate:sqlite`
+- Generate migrations: `pnpm --filter @ama-midi/api db:generate`
 - Migrations stored in `apps/api/drizzle/` folder
-- Apply remote: `npx wrangler d1 migrations apply DB_NAME`
-- Apply local: `npx wrangler d1 migrations apply DB_NAME --local`
+- Apply local: `pnpm --filter @ama-midi/api db:migrate:local` (uses `--env dev`)
+- Apply remote: `pnpm --filter @ama-midi/api db:migrate:remote` (uses `--remote`)
+- Full local reset + migrate + seed: `pnpm --filter @ama-midi/api db:setup`
+
+## Seeding
+
+Two seed strategies:
+
+- **Local** (`scripts/seed.ts`): Uses `better-sqlite3` for direct SQLite writes to the local D1 file. Fast and avoids `workerd` limitations with large SQL imports.
+- **Remote** (`scripts/seed-remote.ts`): Generates batched SQL files and executes via `wrangler d1 execute --remote`. Includes retry logic and delays to avoid Cloudflare API rate limits.
+
+Both scripts generate: 5 users (password: `Aa123@123`), 50 songs (5 with 1500+ notes), collaborators, and note events.
 
 ## Password Hashing (Web Crypto PBKDF2)
 
@@ -96,29 +109,14 @@ async function hashPassword(password: string): Promise<string> {
   const hash = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' }, key, 256);
   return `${Buffer.from(salt).toString('hex')}:${Buffer.from(hash).toString('hex')}`;
 }
-
-async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  const [saltHex, hashHex] = stored.split(':');
-  const salt = new Uint8Array(Buffer.from(saltHex, 'hex'));
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
-  const hash = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' }, key, 256);
-  return Buffer.from(hash).toString('hex') === hashHex;
-}
 ```
 
 ## Query Patterns
 
 ```typescript
-// List songs (owned + shared)
-const owned = db.select().from(songs).where(eq(songs.ownerId, userId));
-const shared = db.select({ song: songs })
-  .from(songCollaborators)
-  .innerJoin(songs, eq(songCollaborators.songId, songs.id))
-  .where(eq(songCollaborators.userId, userId));
-
 // Atomic note creation with ledger entry
 await db.batch([
-  db.insert(notes).values({ id, songId, track, time, title, color }),
+  db.insert(notes).values({ id, songId, track, pitch, time, title, color }),
   db.insert(noteEvents).values({ id: eventId, noteId: id, songId, userId, action: 'CREATE', payload: JSON.stringify(noteData) }),
 ]);
 ```

@@ -1,45 +1,58 @@
 ---
-description: UI design reference for all screens - mockup images and layout specifications
+description: UI design reference for all screens - layout specifications and interactions
 globs: "apps/web/**/*.{ts,tsx,css}"
 alwaysApply: false
 ---
 
 # UI Design Reference
 
-Reference mockups are in `.cursor/designs/`. Use them when building frontend components.
-
-## 1. Piano Roll Editor (.cursor/designs/ui-mockup-piano-roll-editor.png)
+## 1. Piano Grid Editor (EditorPage)
 
 Three-panel layout:
 
-- **Left sidebar** (~220px, bg #1a1a2e): App logo "AMA-MIDI", "+ New Song" button, scrollable song list (title + note count per item, active item highlighted blue), user avatar + name + logout at bottom.
-- **Main area** (flex-1, bg #0d1117): Top toolbar with editable song title, description, action buttons (Save, Share, Undo, Redo). Status bar showing track range, time range, note count, online users. Piano roll grid below.
-- **Right panel** (~280px, bg #1a1a2e, conditional): Appears when a note is selected. "Edit Note" form: Title (text), Description (textarea), Track (dropdown 1-8), Time (number 0-300), Color (swatches). Update (blue) and Delete (red outline) buttons. History section showing ledger entries.
+- **Left sidebar** (~220px, bg #1a1a2e): App logo "AMA-MIDI" (clickable, navigates to dashboard), "+ New Song" button, scrollable song list (title + note count per item, active item highlighted blue), user avatar + name + logout at bottom.
+- **Main area** (flex-1, bg #0d1117): Top toolbar with editable song title, description, action buttons (Save, Share, Play/Stop, BPM control). Status bar showing pitch range, time range, note count, online users. Chromatic piano grid below.
+- **Right panel** (~280px, bg #1a1a2e, conditional): Appears when a note is selected. "Edit Note" form with Title, Description, Pitch (solfège label), Time/Beat, Color swatches. Update and Delete buttons. History section showing ledger entries.
 
-### Piano Roll Grid
+### Chromatic Piano Grid
 
-- 8 columns labeled "Track 1" through "Track 8"
-- Y-axis: time 0s-300s flowing downward, labels every 10s
-- Background: #0d1117 with subtle grid lines (#1e293b)
-- Notes: colored circles (~20px diameter) at (track, time) intersections
-- Selected note: glowing ring highlight
-- Click empty cell: snap-to-grid note placement
-- Default colors: blue #3B82F6, red #EF4444, green #22C55E, purple #A855F7, yellow #EAB308
+- **X-axis (columns)**: 88 piano keys (A0–C8), labeled in chromatic solfège (Do, Do#, Re, Re#, Mi, Fa, Fa#, Sol, Sol#, La, La#, Si) with octave numbers
+- **Y-axis (rows)**: Beat positions (0–299), flowing downward. Row count = 300 clickable 1-beat increments
+- **Virtualized rendering**: Only visible rows (~20–30) are rendered via `@tanstack/react-virtual`
+- **Black/white key distinction**: Black-key columns have a slightly darker background
+- **Notes**: Colored cells at (pitch, beat) intersections
+- **Click empty cell**: Places a note with snap-to-grid
+- **Audio feedback**: Clicking a cell plays the corresponding pitch via Web Audio API
 
-## 2. Song Dashboard (.cursor/designs/ui-mockup-song-dashboard.png)
+### Audio Playback
 
-- **Top nav**: Logo left, search bar center, notification + user avatar right
-- **Page header**: "My Songs" title, subtitle, "+ Create New Song" button (blue)
+- Play/Stop button in toolbar
+- BPM input field (configurable tempo)
+- Playback uses triangle-wave oscillators with ADSR envelope
+- Visual playhead indicator scrolls through beat rows during playback
+- `beatsToSec = 30 / bpm` conversion for timing
+
+## 2. Song Dashboard (DashboardPage)
+
+- **Top nav**: Logo left (clickable to home), search bar center, user avatar right
+- **Page header**: "My Songs" title, "+ Create New Song" button (blue)
 - **Filter tabs**: All Songs | Shared with me | Recent. Sort dropdown on right.
-- **Card grid** (3 columns, responsive): Each card (#1e293b, rounded) has mini piano roll preview thumbnail, song title (bold white), description (gray), bottom stats row (note count, collaborator count, last modified)
+- **Card grid** (3 columns, responsive): Each card (#1e293b, rounded) has mini piano grid preview thumbnail (generated from actual note data: `notePreview`), song title (bold white), bottom stats row (note count, collaborator count, last modified)
 
-## 3. Login / Register (.cursor/designs/ui-mockup-login.png)
+### Create Song Modal
+
+- Modal overlay with title input, description textarea
+- Creates song via API and navigates to editor
+
+## 3. Login / Register (AuthPage)
 
 - Centered card (~400px, bg #1a1a2e) on dark background (#0a0a1a)
-- Logo "AMA-MIDI" with music note icon, subtitle "Enterprise MIDI Editor & Collaboration Suite"
+- Logo "AMA-MIDI" with music note icon
 - Tab switcher: Sign In | Sign Up
-- Sign In: email field, password field, "Forgot password?" link, blue "Sign In" button, divider, "Sign in with SSO" outline button
-- Background: faint piano roll grid pattern at low opacity
+- Sign In: email field, password field, blue "Sign In" button
+- Sign Up: name field, email field, password field, blue "Sign Up" button
+- 2FA challenge: TOTP code input (6-digit) when `requires2fa` is returned from login
+- 2FA setup: QR code display via `qrcode.react`, manual secret display, verification code input
 
 ## Design Tokens
 

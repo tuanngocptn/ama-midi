@@ -33,7 +33,7 @@ src/
   middleware/      Auth, CSRF, rate limiting
   lib/             Utilities: JWT, password hashing
   db/              Drizzle schema
-  durable-objects/ Durable Object classes
+  durable-objects/ Durable Object classes (SongRoom for WebSocket)
 ```
 
 - **Routes**: Parse request (Zod), call service, return `{ data: T }` or let error handler catch
@@ -51,7 +51,7 @@ src/
 | Non-component files | kebab-case | `note-service.ts`, `use-notes.ts` |
 | Components | PascalCase | `PianoRoll`, `NoteCard` |
 | Functions/vars | camelCase | `createNote`, `songId` |
-| Constants | UPPER_SNAKE | `MAX_TRACKS`, `MAX_TIME` |
+| Constants | UPPER_SNAKE | `MAX_TRACKS`, `TOTAL_PITCHES` |
 | DB columns | snake_case | `song_id`, `created_at` |
 | API routes | kebab-case | `/api/songs/:id/notes` |
 
@@ -62,11 +62,22 @@ src/
 - Frontend: surface errors to user via toast notifications
 - Log errors with context (operation name, relevant IDs)
 
-## Constants
+## Constants (packages/shared)
 
 ```typescript
 const MAX_TRACKS = 8;
 const MAX_TIME = 300;
 const TRACK_RANGE = { min: 1, max: 8 } as const;
 const TIME_RANGE = { min: 0, max: 300 } as const;
+
+const TOTAL_PITCHES = 88;
+const PITCH_RANGE = { min: 0, max: 87 } as const;
+
+const CHROMATIC_SOLFEGE = [
+  'Do', 'Do#', 'Re', 'Re#', 'Mi', 'Fa',
+  'Fa#', 'Sol', 'Sol#', 'La', 'La#', 'Si',
+] as const;
 ```
+
+Helper functions: `pitchToMidi(pitch)`, `pitchName(pitch)`, `isBlackKey(pitch)`.
+Pitch frequencies precomputed via equal temperament for Web Audio API playback.

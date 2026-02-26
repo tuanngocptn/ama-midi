@@ -9,15 +9,27 @@ alwaysApply: false
 ## Base URL
 
 All endpoints prefixed with `/api`. Hosted on Cloudflare Workers.
+Health check: `GET /api/health` returns `{ "status": "ok" }`.
 
 ## Authentication
 
 - **POST /api/auth/register** -- Create account `{ email, name, password }`
-- **POST /api/auth/login** -- Returns `{ token: string }` (JWT, 24h expiry)
+- **POST /api/auth/login** -- Returns `{ token }` or `{ requires2fa, tempToken }` if 2FA enabled
+- **POST /api/auth/login/2fa** -- Complete login with TOTP code `{ tempToken, code }`
 - **POST /api/auth/refresh** -- Refresh JWT token
 
 JWT passed via `Authorization: Bearer <token>` header.
-CSRF protection via double-submit cookie pattern on state-changing requests.
+CSRF protection via double-submit cookie pattern on state-changing requests. Skipped when Bearer token is present (cross-origin safe).
+
+## 2FA (TOTP)
+
+| Method | Path | Description |
+|---|---|---|
+| POST | /api/auth/2fa/setup | Generate TOTP secret + otpauth URI (display as QR code) |
+| POST | /api/auth/2fa/verify-setup | Confirm 2FA with TOTP code to enable |
+| POST | /api/auth/2fa/disable | Disable 2FA with TOTP code |
+
+Local development: `DEV_TOTP_BYPASS=true` in `wrangler.toml` `[env.dev]` accepts code `000000`.
 
 ## Songs
 
@@ -25,7 +37,7 @@ CSRF protection via double-submit cookie pattern on state-changing requests.
 |---|---|---|
 | GET | /api/songs | List own songs + shared songs for authenticated user |
 | POST | /api/songs | Create song `{ title, description? }` |
-| GET | /api/songs/:id | Get song by ID (with note count, collaborator count) |
+| GET | /api/songs/:id | Get song by ID (with note count, collaborator count, notePreview) |
 | PUT | /api/songs/:id | Update song `{ title?, description? }` (owner or editor) |
 | DELETE | /api/songs/:id | Delete song and cascade notes (owner only) |
 
@@ -47,16 +59,17 @@ Access rules: owner has full access, `editor` can CRUD notes, `viewer` can only 
 | Method | Path | Description |
 |---|---|---|
 | GET | /api/songs/:id/notes | List all notes for a song |
-| POST | /api/songs/:id/notes | Create note `{ title, track, time, color?, description? }` |
+| POST | /api/songs/:id/notes | Create note `{ title, track, pitch, time, color?, description? }` |
 | PUT | /api/songs/:id/notes/:noteId | Update note fields |
 | DELETE | /api/songs/:id/notes/:noteId | Delete note |
 
 ### Note Constraints
 
-- `track`: integer, 1-8
-- `time`: float, 0.0-300.0
+- `track`: integer, 1–8
+- `pitch`: integer, 0–87 (88 piano keys, A0–C8)
+- `time`: float, 0.0–300.0 (beat position)
 - `color`: hex string, default `#3B82F6`
-- Unique constraint: one note per (song_id, track, time) -- returns 409 on conflict
+- Unique constraint: one note per (song_id, track, pitch, time) -- returns 409 on conflict
 
 ## Note History (Ledger)
 
@@ -68,7 +81,7 @@ Every note create/update/delete writes a row to `note_events` with the action an
 
 ## WebSocket (Real-time)
 
-- **GET /api/songs/:id/ws** -- Upgrade to WebSocket, proxied to SongRoom Durable Object
+- **GET /api/ws/:songId/ws?token=JWT** -- Upgrade to WebSocket, proxied to SongRoom Durable Object
 
 ### Messages (server -> client)
 
@@ -78,12 +91,13 @@ Every note create/update/delete writes a row to `note_events` with the action an
 { "type": "note:deleted", "data": { "id": "..." } }
 { "type": "user:joined", "data": { "userId": "...", "name": "..." } }
 { "type": "user:left", "data": { "userId": "..." } }
+{ "type": "error", "data": { "message": "..." } }
 ```
 
 ### Messages (client -> server)
 
 ```json
-{ "type": "note:create", "data": { "title": "...", "track": 1, "time": 5.0 } }
+{ "type": "note:create", "data": { "title": "...", "track": 1, "pitch": 40, "time": 5.0 } }
 { "type": "note:update", "data": { "id": "...", "title": "..." } }
 { "type": "note:delete", "data": { "id": "..." } }
 ```
