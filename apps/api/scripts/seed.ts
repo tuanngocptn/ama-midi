@@ -284,6 +284,24 @@ async function main() {
     console.log(' ✓');
   }
 
+  // 6. Spread timestamps over the past 90 days
+  console.log('\nSetting varied timestamps...');
+  const now = Math.floor(Date.now() / 1000);
+  for (let i = 0; i < songs.length; i++) {
+    const daysAgo = Math.floor((i / songs.length) * 90);
+    const hoursOffset = Math.floor(Math.random() * 24);
+    const createdAt = now - (daysAgo * 86400) - (hoursOffset * 3600);
+    const updatedAt = createdAt + Math.floor(Math.random() * daysAgo * 86400);
+    const finalUpdatedAt = Math.min(updatedAt, now);
+    try {
+      execSync(
+        `npx wrangler d1 execute ama-midi-db --local --command "UPDATE songs SET created_at = ${createdAt}, updated_at = ${finalUpdatedAt} WHERE id = '${songs[i]!.id}'"`,
+        { stdio: 'pipe' },
+      );
+    } catch { /* ignore */ }
+  }
+  console.log('  ✓ Timestamps spread over 90 days');
+
   console.log('\n✅ Seed complete!');
   console.log('\nLogin credentials:');
   console.log('  Password for all users: Aa123@123');

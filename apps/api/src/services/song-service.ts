@@ -9,30 +9,54 @@ export async function listSongs(
   db: DB,
   userId: string,
   filter: string,
-): Promise<typeof songs.$inferSelect[]> {
-  if (filter === 'owned') {
-    return db.select().from(songs).where(eq(songs.ownerId, userId));
-  }
+) {
+  let rawSongs: (typeof songs.$inferSelect)[];
 
-  if (filter === 'shared') {
+  if (filter === 'owned') {
+    rawSongs = await db.select().from(songs).where(eq(songs.ownerId, userId));
+  } else if (filter === 'shared') {
     const rows = await db
       .select({ song: songs })
       .from(songCollaborators)
       .innerJoin(songs, eq(songCollaborators.songId, songs.id))
       .where(eq(songCollaborators.userId, userId));
-    return rows.map((r) => r.song);
+    rawSongs = rows.map((r) => r.song);
+  } else {
+    const owned = await db.select().from(songs).where(eq(songs.ownerId, userId));
+    const sharedRows = await db
+      .select({ song: songs })
+      .from(songCollaborators)
+      .innerJoin(songs, eq(songCollaborators.songId, songs.id))
+      .where(eq(songCollaborators.userId, userId));
+    const shared = sharedRows.map((r) => r.song);
+    const seen = new Set(owned.map((s) => s.id));
+    rawSongs = [...owned, ...shared.filter((s) => !seen.has(s.id))];
   }
 
-  const owned = await db.select().from(songs).where(eq(songs.ownerId, userId));
-  const sharedRows = await db
-    .select({ song: songs })
-    .from(songCollaborators)
-    .innerJoin(songs, eq(songCollaborators.songId, songs.id))
-    .where(eq(songCollaborators.userId, userId));
-  const shared = sharedRows.map((r) => r.song);
+  if (rawSongs.length === 0) return [];
 
-  const seen = new Set(owned.map((s) => s.id));
-  return [...owned, ...shared.filter((s) => !seen.has(s.id))];
+  const ids = rawSongs.map((s) => s.id);
+
+  const noteCounts = await db
+    .select({ songId: notes.songId, value: count() })
+    .from(notes)
+    .where(sql`${notes.songId} IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`)
+    .groupBy(notes.songId);
+
+  const collabCounts = await db
+    .select({ songId: songCollaborators.songId, value: count() })
+    .from(songCollaborators)
+    .where(sql`${songCollaborators.songId} IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`)
+    .groupBy(songCollaborators.songId);
+
+  const noteMap = new Map(noteCounts.map((r) => [r.songId, r.value]));
+  const collabMap = new Map(collabCounts.map((r) => [r.songId, r.value]));
+
+  return rawSongs.map((s) => ({
+    ...s,
+    noteCount: noteMap.get(s.id) ?? 0,
+    collaboratorCount: collabMap.get(s.id) ?? 0,
+  }));
 }
 
 export async function createSong(
