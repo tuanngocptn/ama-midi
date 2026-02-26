@@ -8,11 +8,22 @@ const CSRF_COOKIE = 'csrf_token';
 
 export const csrfMiddleware = createMiddleware<{ Bindings: Env }>(
   async (c, next) => {
+    const authHeader = c.req.header('Authorization') ?? '';
+    const hasBearerToken = authHeader.startsWith('Bearer ');
+
     if (SAFE_METHODS.includes(c.req.method)) {
       const token = crypto.randomUUID();
       const isLocal = new URL(c.req.url).hostname === 'localhost';
-      const flags = isLocal ? 'SameSite=Strict' : 'SameSite=Strict; Secure';
+      const flags = isLocal
+        ? 'SameSite=Strict'
+        : 'SameSite=None; Secure';
       c.header('Set-Cookie', `${CSRF_COOKIE}=${token}; Path=/; ${flags}`);
+      await next();
+      return;
+    }
+
+    // JWT Bearer auth is immune to CSRF — skip validation
+    if (hasBearerToken) {
       await next();
       return;
     }
