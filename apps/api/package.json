@@ -23,6 +23,9 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.12.17",
     "@cloudflare/workers-types": "^4",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.3.1",
+    "better-sqlite3": "^12.6.2",
     "drizzle-kit": "^0.30",
     "tsx": "^4.21.0",
     "typescript": "^5",

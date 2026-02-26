@@ -24,6 +24,8 @@ app.use(
   }),
 );
 
+app.get('/api/health', (c) => c.json({ status: 'ok' }));
+
 app.route('/api/auth', authRouter);
 
 app.use('/api/songs/*', csrfMiddleware);

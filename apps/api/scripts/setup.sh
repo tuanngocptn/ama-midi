@@ -20,37 +20,9 @@ echo "2. Running migrations..."
 npx wrangler d1 migrations apply ama-midi-db --local
 echo "   ✓ Migrations applied"
 
-# 3. Start API server in background for seeding
+# 3. Generate & execute seed SQL (no API server needed)
 echo ""
-echo "3. Starting API server for seeding..."
-npx wrangler dev &
-API_PID=$!
-
-cleanup() {
-  echo ""
-  echo "Stopping API server (PID $API_PID)..."
-  kill "$API_PID" 2>/dev/null || true
-  wait "$API_PID" 2>/dev/null || true
-}
-trap cleanup EXIT
-
-# Wait for API to be ready
-echo "   Waiting for API to be ready..."
-for i in $(seq 1 30); do
-  if curl -s http://localhost:8787/api/auth/login > /dev/null 2>&1; then
-    echo "   ✓ API is ready"
-    break
-  fi
-  if [ "$i" -eq 30 ]; then
-    echo "   ✗ API failed to start after 30s"
-    exit 1
-  fi
-  sleep 1
-done
-
-# 4. Run seed script
-echo ""
-echo "4. Running seed script..."
+echo "3. Running seed script..."
 npx tsx scripts/seed.ts
 
 echo ""

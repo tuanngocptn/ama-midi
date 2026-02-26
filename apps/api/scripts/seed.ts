@@ -1,13 +1,16 @@
 /**
- * Seed script — run via: pnpm --filter @ama-midi/api db:seed
+ * Seed script — writes directly to the D1 SQLite database file.
+ * Run: pnpm --filter @ama-midi/api db:seed
  *
- * Creates 5 users (password: Aa123@123), 50 songs, and notes.
- * All users have TOTP enabled with a shared secret (code 000000 works locally).
+ * Creates 5 users (password: Aa123@123), 50 songs, notes, and collaborators.
+ * All users have TOTP enabled with shared secret.
  */
 
-import { execSync } from 'node:child_process';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { randomUUID, pbkdf2Sync, randomBytes } from 'node:crypto';
+import Database from 'better-sqlite3';
 
-const API = 'http://localhost:8787/api';
 const PASSWORD = 'Aa123@123';
 const TOTP_SECRET = 'CZ3QM5LI7FB2QZJTZS6CH5KZS35W2V74';
 
@@ -32,277 +35,153 @@ const SONG_TITLES = [
   'Silk Road', 'Bamboo Forest', 'Cherry Blossom', 'Lotus Pond', 'Dragon Fly',
 ];
 
-interface AuthResult {
-  token: string;
-  csrf: string;
-  userId: string;
+const COLORS = ['#3B82F6', '#EF4444', '#22C55E', '#A855F7', '#EAB308', '#EC4899', '#06B6D4', '#F97316'];
+const PITCH_NAMES = ['Do', 'Do#', 'Re', 'Re#', 'Mi', 'Fa', 'Fa#', 'Sol', 'Sol#', 'La', 'La#', 'Si'];
+const EXTRA_HEAVY_INDICES = [0, 10, 20, 30, 40];
+const EXTRA_HEAVY_COUNTS = [5000, 5200, 5500, 5100, 5300];
+
+function hashPassword(password: string): string {
+  const salt = randomBytes(16);
+  const hash = pbkdf2Sync(password, salt, 100_000, 32, 'sha256');
+  return salt.toString('hex') + ':' + hash.toString('hex');
 }
 
-async function api(
-  method: string,
-  path: string,
-  opts?: { token?: string; csrf?: string; body?: unknown },
-): Promise<unknown> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (opts?.token) headers['Authorization'] = `Bearer ${opts.token}`;
-  if (opts?.csrf) {
-    headers['X-CSRF-Token'] = opts.csrf;
-    headers['Cookie'] = `csrf_token=${opts.csrf}`;
-  }
-
-  const res = await fetch(`${API}${path}`, {
-    method,
-    headers,
-    body: opts?.body ? JSON.stringify(opts.body) : undefined,
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`${method} ${path} → ${res.status}: ${text}`);
-  }
-
-  const json = (await res.json()) as { data: unknown };
-  return json.data;
+let seed = 42;
+function rng(): number {
+  seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+  return seed / 0x7fffffff;
 }
 
-async function getCsrf(token: string): Promise<string> {
-  const res = await fetch(`${API}/songs`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const cookie = res.headers.get('set-cookie') ?? '';
-  const match = cookie.match(/csrf_token=([^;]+)/);
-  return match?.[1] ?? '';
+function findDbPath(): string {
+  const d1Dir = join(process.cwd(), '.wrangler', 'state', 'v3', 'd1', 'miniflare-D1DatabaseObject');
+  const files = readdirSync(d1Dir).filter((f) => f.endsWith('.sqlite'));
+  if (files.length === 0) throw new Error(`No .sqlite file found in ${d1Dir}. Run migrations first.`);
+  return join(d1Dir, files[0]!);
 }
 
-async function registerUser(email: string, name: string): Promise<AuthResult> {
-  const data = (await api('POST', '/auth/register', {
-    body: { email, name, password: PASSWORD },
-  })) as { token: string; user: { id: string } };
+function main() {
+  const dbPath = findDbPath();
+  console.log(`Database: ${dbPath}`);
 
-  const csrf = await getCsrf(data.token);
-  return { token: data.token, userId: data.user.id, csrf };
-}
+  const db = new Database(dbPath);
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = OFF');
 
-function randomPitch(): number {
-  return Math.floor(Math.random() * 88);
-}
+  const now = Math.floor(Date.now() / 1000);
+  const passwordHash = hashPassword(PASSWORD);
 
-function randomColor(): string {
-  const colors = ['#3B82F6', '#EF4444', '#22C55E', '#A855F7', '#EAB308', '#EC4899', '#06B6D4', '#F97316'];
-  return colors[Math.floor(Math.random() * colors.length)]!;
-}
+  // Clear existing data
+  console.log('Clearing existing data...');
+  db.exec('DELETE FROM note_events; DELETE FROM notes; DELETE FROM song_collaborators; DELETE FROM songs; DELETE FROM users;');
 
-async function createNotesForSong(
-  songId: string,
-  count: number,
-  auth: AuthResult,
-): Promise<void> {
-  const usedPositions = new Set<string>();
-  let created = 0;
-  const batchSize = 50;
-
-  while (created < count) {
-    const promises: Promise<void>[] = [];
-
-    for (let b = 0; b < batchSize && created + b < count; b++) {
-      let track: number, pitch: number, time: number, key: string;
-      let attempts = 0;
-      do {
-        track = Math.floor(Math.random() * 8) + 1;
-        pitch = randomPitch();
-        time = Math.floor(Math.random() * 300);
-        key = `${track}:${pitch}:${time}`;
-        attempts++;
-      } while (usedPositions.has(key) && attempts < 100);
-
-      if (usedPositions.has(key)) continue;
-      usedPositions.add(key);
-
-      const pitchNames = ['Do', 'Do#', 'Re', 'Re#', 'Mi', 'Fa', 'Fa#', 'Sol', 'Sol#', 'La', 'La#', 'Si'];
-      const midi = 21 + pitch;
-      const noteName = pitchNames[midi % 12];
-      const octave = Math.floor(midi / 12) - 1;
-
-      promises.push(
-        api('POST', `/songs/${songId}/notes`, {
-          token: auth.token,
-          csrf: auth.csrf,
-          body: {
-            title: `${noteName}${octave} @ beat ${time}`,
-            track,
-            pitch,
-            time,
-            color: randomColor(),
-          },
-        }).then(() => {}) // discard return value
-          .catch(() => {}), // skip duplicates silently
-      );
-    }
-
-    await Promise.all(promises);
-    created += batchSize;
-    if (created % 500 === 0 && created < count) {
-      process.stdout.write(`  ${created}/${count} notes...`);
-    }
-  }
-}
-
-async function main() {
-  console.log('Seeding AMA-MIDI database...\n');
-
-  // Check API is running
-  try {
-    const check = await fetch(`${API}/songs`, { method: 'GET' });
-    if (!check.ok && check.status !== 401) throw new Error();
-  } catch {
-    console.error('ERROR: API not running at http://localhost:8787');
-    console.error('Start it first: pnpm --filter @ama-midi/api dev');
-    process.exit(1);
-  }
-
-  // 1. Register 5 users
-  console.log('Creating 5 users (password: Aa123@123)...');
-  const auths: AuthResult[] = [];
-
+  // 1. Users
+  console.log('Creating 5 users...');
+  const userIds: string[] = [];
+  const insertUser = db.prepare(
+    'INSERT INTO users (id, email, name, password_hash, totp_secret, totp_enabled, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)',
+  );
   for (const u of USERS) {
-    try {
-      const auth = await registerUser(u.email, u.name);
-      auths.push(auth);
-      console.log(`  ✓ ${u.name} <${u.email}> (id: ${auth.userId})`);
-    } catch {
-      console.log(`  ⚠ ${u.name} already exists, logging in...`);
-      const loginData = (await api('POST', '/auth/login', {
-        body: { email: u.email, password: PASSWORD },
-      })) as { token?: string; user?: { id: string }; requires2fa?: boolean };
-
-      let token: string;
-      let userId: string;
-
-      if (loginData.requires2fa) {
-        const twoFaData = (await api('POST', '/auth/login/2fa', {
-          body: { email: u.email, password: PASSWORD, code: '000000' },
-        })) as { token: string; user: { id: string } };
-        token = twoFaData.token;
-        userId = twoFaData.user.id;
-      } else {
-        token = loginData.token!;
-        userId = loginData.user!.id;
-      }
-
-      const csrf = await getCsrf(token);
-      auths.push({ token, userId, csrf });
-      console.log(`  ✓ ${u.name} logged in (id: ${userId})`);
-    }
+    const id = randomUUID();
+    userIds.push(id);
+    insertUser.run(id, u.email, u.name, passwordHash, TOTP_SECRET, now);
+    console.log(`  ✓ ${u.name} <${u.email}>`);
   }
 
-  // 2. Enable TOTP for all users with shared secret
-  console.log(`\nEnabling 2FA for all users (secret: ${TOTP_SECRET})...`);
-  for (let i = 0; i < USERS.length; i++) {
-    const auth = auths[i]!;
-    try {
-      await api('POST', '/auth/2fa/setup', { token: auth.token, csrf: auth.csrf });
-      await api('POST', '/auth/2fa/verify-setup', {
-        token: auth.token,
-        csrf: auth.csrf,
-        body: { code: '000000' },
-      });
-    } catch {
-      console.log(`  ⚠ ${USERS[i]!.name} — 2FA already enabled (OK)`);
-    }
-    try {
-      execSync(
-        `npx wrangler d1 execute ama-midi-db --local --command "UPDATE users SET totp_secret = '${TOTP_SECRET}' WHERE id = '${auth.userId}'"`,
-        { stdio: 'pipe' },
-      );
-      console.log(`  ✓ ${USERS[i]!.name} — 2FA secret set`);
-    } catch {
-      console.log(`  ⚠ ${USERS[i]!.name} — failed to set TOTP secret`);
-    }
-  }
-
-  // 3. Create 50 songs distributed across users
+  // 2. Songs
   console.log('\nCreating 50 songs...');
-
   interface SongInfo { id: string; ownerIdx: number; noteTarget: number; title: string }
   const songs: SongInfo[] = [];
 
-  // 5 "extra-heavy" songs with 5000+ notes, one per user
-  const extraHeavyIndices = [0, 10, 20, 30, 40];
-  const extraHeavyCounts = [5000, 5200, 5500, 5100, 5300];
+  const insertSong = db.prepare(
+    'INSERT INTO songs (id, title, description, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+  );
 
   for (let i = 0; i < 50; i++) {
     const ownerIdx = i % 5;
-    const auth = auths[ownerIdx]!;
+    const id = randomUUID();
     const title = SONG_TITLES[i]!;
-    const isExtraHeavy = extraHeavyIndices.includes(i);
-    const noteTarget = isExtraHeavy
-      ? extraHeavyCounts[extraHeavyIndices.indexOf(i)]!
-      : 1500 + Math.floor(Math.random() * 500);
+    const desc = `Seed song #${i + 1} by ${USERS[ownerIdx]!.name}`;
+    const isHeavy = EXTRA_HEAVY_INDICES.includes(i);
+    const noteTarget = isHeavy
+      ? EXTRA_HEAVY_COUNTS[EXTRA_HEAVY_INDICES.indexOf(i)]!
+      : 1500 + Math.floor(rng() * 500);
 
-    try {
-      const song = (await api('POST', '/songs', {
-        token: auth.token,
-        csrf: auth.csrf,
-        body: { title, description: `Seed song #${i + 1} by ${USERS[ownerIdx]!.name}` },
-      })) as { id: string };
+    const daysAgo = Math.floor((i / 50) * 90);
+    const hoursOffset = Math.floor(rng() * 24);
+    const createdAt = now - (daysAgo * 86400) - (hoursOffset * 3600);
+    const updatedAt = Math.min(createdAt + Math.floor(rng() * Math.max(daysAgo, 1) * 86400), now);
 
-      songs.push({ id: song.id, ownerIdx, noteTarget, title });
-      const tag = isExtraHeavy ? ` [${noteTarget} notes]` : '';
-      console.log(`  ✓ #${i + 1} "${title}" by ${USERS[ownerIdx]!.name}${tag}`);
-    } catch {
-      console.log(`  ⚠ #${i + 1} "${title}" — failed to create`);
-    }
+    insertSong.run(id, title, desc, userIds[ownerIdx]!, createdAt, updatedAt);
+    songs.push({ id, ownerIdx, noteTarget, title });
+
+    const tag = isHeavy ? ` [${noteTarget} notes]` : '';
+    console.log(`  ✓ #${i + 1} "${title}" by ${USERS[ownerIdx]!.name}${tag}`);
   }
 
-  // 4. Add collaborators: each song gets 1-2 random collaborators
+  // 3. Collaborators
   console.log('\nAdding collaborators...');
   let collabCount = 0;
+  const insertCollab = db.prepare(
+    'INSERT INTO song_collaborators (id, song_id, user_id, role, created_at) VALUES (?, ?, ?, ?, ?)',
+  );
+
   for (const song of songs) {
-    const numCollabs = Math.floor(Math.random() * 2) + 1;
+    const numCollabs = 1 + Math.floor(rng() * 2);
     const candidates = [0, 1, 2, 3, 4].filter((i) => i !== song.ownerIdx);
-    for (let c = 0; c < numCollabs; c++) {
-      const pick = candidates.splice(Math.floor(Math.random() * candidates.length), 1)[0]!;
-      const auth = auths[song.ownerIdx]!;
-      try {
-        await api('POST', `/songs/${song.id}/collaborators`, {
-          token: auth.token,
-          csrf: auth.csrf,
-          body: { email: USERS[pick]!.email, role: c === 0 ? 'editor' : 'viewer' },
-        });
-        collabCount++;
-      } catch { /* skip */ }
+    for (let c = 0; c < numCollabs && candidates.length > 0; c++) {
+      const pickIdx = Math.floor(rng() * candidates.length);
+      const pick = candidates.splice(pickIdx, 1)[0]!;
+      const role = c === 0 ? 'editor' : 'viewer';
+      insertCollab.run(randomUUID(), song.id, userIds[pick]!, role, now);
+      collabCount++;
     }
   }
   console.log(`  ✓ ${collabCount} collaborator links created`);
 
-  // 5. Create notes
+  // 4. Notes (use transaction for speed)
   console.log('\nCreating notes...');
+  const insertNote = db.prepare(
+    'INSERT INTO notes (id, song_id, track, pitch, time, title, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  );
+
+  let totalNotes = 0;
+  const batchInsert = db.transaction((songInfo: SongInfo) => {
+    const used = new Set<string>();
+    for (let n = 0; n < songInfo.noteTarget; n++) {
+      let track: number, pitch: number, time: number, key: string;
+      let attempts = 0;
+      do {
+        track = 1 + Math.floor(rng() * 8);
+        pitch = Math.floor(rng() * 88);
+        time = Math.floor(rng() * 300);
+        key = `${track}:${pitch}:${time}`;
+        attempts++;
+      } while (used.has(key) && attempts < 100);
+      if (used.has(key)) continue;
+      used.add(key);
+
+      const midi = 21 + pitch;
+      const noteName = PITCH_NAMES[midi % 12]!;
+      const octave = Math.floor(midi / 12) - 1;
+      const color = COLORS[Math.floor(rng() * COLORS.length)]!;
+      const title = `${noteName}${octave} @ beat ${time}`;
+
+      insertNote.run(randomUUID(), songInfo.id, track, pitch, time, title, color, now, now);
+      totalNotes++;
+    }
+  });
+
   for (const song of songs) {
-    const auth = auths[song.ownerIdx]!;
     process.stdout.write(`  "${song.title}" — ${song.noteTarget} notes...`);
-    await createNotesForSong(song.id, song.noteTarget, auth);
+    batchInsert(song);
     console.log(' ✓');
   }
 
-  // 6. Spread timestamps over the past 90 days
-  console.log('\nSetting varied timestamps...');
-  const now = Math.floor(Date.now() / 1000);
-  for (let i = 0; i < songs.length; i++) {
-    const daysAgo = Math.floor((i / songs.length) * 90);
-    const hoursOffset = Math.floor(Math.random() * 24);
-    const createdAt = now - (daysAgo * 86400) - (hoursOffset * 3600);
-    const updatedAt = createdAt + Math.floor(Math.random() * daysAgo * 86400);
-    const finalUpdatedAt = Math.min(updatedAt, now);
-    try {
-      execSync(
-        `npx wrangler d1 execute ama-midi-db --local --command "UPDATE songs SET created_at = ${createdAt}, updated_at = ${finalUpdatedAt} WHERE id = '${songs[i]!.id}'"`,
-        { stdio: 'pipe' },
-      );
-    } catch { /* ignore */ }
-  }
-  console.log('  ✓ Timestamps spread over 90 days');
+  db.pragma('foreign_keys = ON');
+  db.close();
 
-  console.log('\n✅ Seed complete!');
+  console.log(`\n✅ Seed complete!`);
+  console.log(`  ${USERS.length} users, ${songs.length} songs, ${collabCount} collaborators, ${totalNotes} notes`);
   console.log('\nLogin credentials:');
   console.log('  Password for all users: Aa123@123');
   console.log(`  TOTP secret (all users): ${TOTP_SECRET}`);
@@ -313,7 +192,4 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error('\nSeed failed:', err);
-  process.exit(1);
-});
+main();

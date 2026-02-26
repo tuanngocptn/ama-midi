@@ -2,17 +2,26 @@ services:
   web:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: apps/web/Dockerfile
     ports:
       - "3000:80"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
   api:
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: apps/api/Dockerfile
     ports:
       - "8787:8787"
     environment:
       - JWT_SECRET=change-me-in-production
+      - DEV_TOTP_BYPASS=true
+      - RUN_SEED=true
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8787/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
