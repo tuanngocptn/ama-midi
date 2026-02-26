@@ -36,6 +36,7 @@ const STATEMENTS = [
     id text PRIMARY KEY NOT NULL,
     song_id text NOT NULL,
     track integer NOT NULL,
+    pitch integer DEFAULT 0 NOT NULL,
     time real NOT NULL,
     title text NOT NULL,
     description text,
@@ -44,7 +45,7 @@ const STATEMENTS = [
     updated_at integer DEFAULT (unixepoch()) NOT NULL,
     FOREIGN KEY (song_id) REFERENCES songs(id) ON UPDATE no action ON DELETE cascade
   )`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS uq_song_track_time ON notes (song_id, track, time)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS uq_song_track_pitch_time ON notes (song_id, track, pitch, time)`,
   `CREATE INDEX IF NOT EXISTS idx_notes_song_id ON notes (song_id)`,
   `CREATE TABLE IF NOT EXISTS note_events (
     id text PRIMARY KEY NOT NULL,

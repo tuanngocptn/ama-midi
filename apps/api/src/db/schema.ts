@@ -69,6 +69,7 @@ export const notes = sqliteTable(
       .notNull()
       .references(() => songs.id, { onDelete: 'cascade' }),
     track: integer('track').notNull(),
+    pitch: integer('pitch').notNull().default(0),
     time: real('time').notNull(),
     title: text('title').notNull(),
     description: text('description'),
@@ -81,9 +82,10 @@ export const notes = sqliteTable(
       .default(sql`(unixepoch())`),
   },
   (table) => ({
-    uniquePosition: uniqueIndex('uq_song_track_time').on(
+    uniquePosition: uniqueIndex('uq_song_track_pitch_time').on(
       table.songId,
       table.track,
+      table.pitch,
       table.time,
     ),
     songIdx: index('idx_notes_song_id').on(table.songId),

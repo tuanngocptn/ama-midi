@@ -20,6 +20,7 @@ export interface Note {
   id: string;
   songId: string;
   track: number;
+  pitch: number;
   time: number;
   title: string;
   description: string | null;

@@ -17,6 +17,7 @@ export async function createNote(
   input: {
     title: string;
     track: number;
+    pitch?: number;
     time: number;
     color: string;
     description?: string;
@@ -34,6 +35,7 @@ export async function createNote(
         id,
         songId,
         track: input.track,
+        pitch: input.pitch ?? 0,
         time: input.time,
         title: input.title,
         description: input.description ?? null,
@@ -70,6 +72,7 @@ export async function updateNote(
   input: {
     title?: string;
     track?: number;
+    pitch?: number;
     time?: number;
     color?: string;
     description?: string | null;
@@ -97,6 +100,7 @@ export async function updateNote(
         .set({
           ...(input.title !== undefined && { title: input.title }),
           ...(input.track !== undefined && { track: input.track }),
+          ...(input.pitch !== undefined && { pitch: input.pitch }),
           ...(input.time !== undefined && { time: input.time }),
           ...(input.color !== undefined && { color: input.color }),
           ...(input.description !== undefined && { description: input.description ?? null }),

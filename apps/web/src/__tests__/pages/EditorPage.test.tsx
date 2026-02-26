@@ -18,6 +18,7 @@ const makeNote = (overrides: Partial<Note> = {}): Note => ({
   id: 'note-1',
   songId: 'test-song-id',
   track: 1,
+  pitch: 0,
   time: 0,
   title: 'Test Note',
   description: null,
@@ -86,11 +87,17 @@ describe('EditorPage', () => {
     expect(screen.getByText('Alice')).toBeInTheDocument();
   });
 
-  it('renders track headers', () => {
+  it('renders track tabs', () => {
     render(<EditorPage />);
     for (let i = 1; i <= 8; i++) {
       expect(screen.getByText(`Track ${i}`)).toBeInTheDocument();
     }
+  });
+
+  it('renders pitch column headers', () => {
+    render(<EditorPage />);
+    expect(screen.getByText('Do2')).toBeInTheDocument();
+    expect(screen.getByText('Si4')).toBeInTheDocument();
   });
 
   it('shows note count in toolbar', () => {
@@ -128,12 +135,18 @@ describe('EditorPage', () => {
     expect(screen.queryByText('Edit Note')).not.toBeInTheDocument();
   });
 
-  it('renders Save, Share, Undo, and Redo buttons', () => {
+  it('renders Play, Save, Share, Undo, and Redo buttons', () => {
     render(<EditorPage />);
+    expect(screen.getByRole('button', { name: /play/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /share/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /undo/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /redo/i })).toBeInTheDocument();
+  });
+
+  it('renders BPM input with default value', () => {
+    render(<EditorPage />);
+    expect(screen.getByLabelText('BPM')).toHaveValue(120);
   });
 
   it('calls deleteNote when delete button clicked', async () => {

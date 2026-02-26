@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   TRACK_RANGE,
   TIME_RANGE,
+  PITCH_RANGE,
   DEFAULT_NOTE_COLOR,
   COLLABORATOR_ROLES,
   NOTE_ACTIONS,
@@ -40,6 +41,7 @@ export const createNoteSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(1000).optional(),
   track: z.number().int().min(TRACK_RANGE.min).max(TRACK_RANGE.max),
+  pitch: z.number().int().min(PITCH_RANGE.min).max(PITCH_RANGE.max).default(0),
   time: z.number().min(TIME_RANGE.min).max(TIME_RANGE.max),
   color: z.string().regex(hexColorRegex).default(DEFAULT_NOTE_COLOR),
 });
@@ -48,6 +50,7 @@ export const updateNoteSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(1000).nullable().optional(),
   track: z.number().int().min(TRACK_RANGE.min).max(TRACK_RANGE.max).optional(),
+  pitch: z.number().int().min(PITCH_RANGE.min).max(PITCH_RANGE.max).optional(),
   time: z.number().min(TIME_RANGE.min).max(TIME_RANGE.max).optional(),
   color: z.string().regex(hexColorRegex).optional(),
 });

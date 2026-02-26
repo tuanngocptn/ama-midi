@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { Note, NoteEvent, WsServerMessage } from '@ama-midi/shared';
 import { api } from '@/lib/api';
 
-type CreateNoteInput = Pick<Note, 'track' | 'time' | 'title' | 'color'> & {
+type CreateNoteInput = Pick<Note, 'track' | 'pitch' | 'time' | 'title' | 'color'> & {
   description?: string;
 };
 

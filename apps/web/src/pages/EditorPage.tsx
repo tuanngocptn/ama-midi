@@ -5,21 +5,24 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useSongStore } from '@/stores/song-store';
 import { useNoteStore } from '@/stores/note-store';
 import { CreateSongModal } from '@/components/CreateSongModal';
+import { AudioEngine } from '@/lib/audio-engine';
 import { api } from '@/lib/api';
 import {
   MAX_TRACKS,
   MAX_TIME,
   NOTE_COLORS,
   DEFAULT_NOTE_COLOR,
+  TOTAL_PITCHES,
+  pitchName,
+  isBlackKey,
 } from '@ama-midi/shared';
 import type { Note, SongCollaborator } from '@ama-midi/shared';
 
-const TIME_STEP = 5;
-const TIME_STEPS = Array.from(
-  { length: MAX_TIME / TIME_STEP + 1 },
-  (_, i) => i * TIME_STEP,
-);
+const TIME_STEPS = Array.from({ length: MAX_TIME + 1 }, (_, i) => i);
+const PITCHES = Array.from({ length: TOTAL_PITCHES }, (_, i) => i);
 const TRACKS = Array.from({ length: MAX_TRACKS }, (_, i) => i + 1);
+
+const audioEngine = new AudioEngine();
 
 interface HistoryEntry {
   id: string;
@@ -54,13 +57,14 @@ function NotePanel({
   history,
 }: {
   note: Note;
-  onUpdate: (data: { title?: string; description?: string; track?: number; time?: number; color?: string }) => void;
+  onUpdate: (data: { title?: string; description?: string; track?: number; pitch?: number; time?: number; color?: string }) => void;
   onDelete: () => void;
   history: HistoryEntry[];
 }) {
   const [title, setTitle] = React.useState(note.title);
   const [description, setDescription] = React.useState(note.description ?? '');
   const [track, setTrack] = React.useState(note.track);
+  const [pitch, setPitch] = React.useState(note.pitch);
   const [time, setTime] = React.useState(note.time);
   const [color, setColor] = React.useState(note.color);
 
@@ -68,13 +72,14 @@ function NotePanel({
     setTitle(note.title);
     setDescription(note.description ?? '');
     setTrack(note.track);
+    setPitch(note.pitch);
     setTime(note.time);
     setColor(note.color);
-  }, [note.id, note.title, note.description, note.track, note.time, note.color]);
+  }, [note.id, note.title, note.description, note.track, note.pitch, note.time, note.color]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdate({ title, description: description || undefined, track, time, color });
+    onUpdate({ title, description: description || undefined, track, pitch, time, color });
   };
 
   const noteHistory = history.filter((h) => h.noteId === note.id).slice(0, 10);
@@ -120,15 +125,22 @@ function NotePanel({
 
           <div className="flex gap-3">
             <div className="flex-1">
-              <label htmlFor="note-track" className="mb-1 block text-xs text-text-secondary">Track</label>
-              <select id="note-track" value={track} onChange={(e) => setTrack(Number(e.target.value))} className="w-full text-sm">
-                {TRACKS.map((t) => (<option key={t} value={t}>{t}</option>))}
+              <label htmlFor="note-pitch" className="mb-1 block text-xs text-text-secondary">Pitch</label>
+              <select id="note-pitch" value={pitch} onChange={(e) => setPitch(Number(e.target.value))} className="w-full text-sm">
+                {PITCHES.map((p) => (<option key={p} value={p}>{pitchName(p)}</option>))}
               </select>
             </div>
             <div className="flex-1">
               <label htmlFor="note-time" className="mb-1 block text-xs text-text-secondary">Time</label>
               <input id="note-time" type="number" min={0} max={MAX_TIME} step={1} value={time} onChange={(e) => setTime(Number(e.target.value))} className="w-full text-sm" />
             </div>
+          </div>
+
+          <div>
+            <label htmlFor="note-track" className="mb-1 block text-xs text-text-secondary">Track</label>
+            <select id="note-track" value={track} onChange={(e) => setTrack(Number(e.target.value))} className="w-full text-sm">
+              {TRACKS.map((t) => (<option key={t} value={t}>Track {t}</option>))}
+            </select>
           </div>
 
           <div>
@@ -156,7 +168,6 @@ function NotePanel({
         </form>
       </div>
 
-      {/* History */}
       {noteHistory.length > 0 && (
         <div className="border-t border-border-subtle p-4">
           <h3 className="mb-3 text-sm font-semibold text-text-primary">History</h3>
@@ -177,28 +188,38 @@ function NotePanel({
   );
 }
 
-const ROW_HEIGHT = 40;
+const ROW_HEIGHT = 24;
+const COL_WIDTH = 36;
 
 function PianoGrid({
   notes,
   selectedNoteId,
+  activeTrack,
+  playheadTime,
   onCellClick,
   onNoteClick,
 }: {
   notes: Note[];
   selectedNoteId: string | null;
-  onCellClick: (track: number, time: number) => void;
+  activeTrack: number;
+  playheadTime: number | null;
+  onCellClick: (pitch: number, time: number) => void;
   onNoteClick: (note: Note) => void;
 }) {
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
+  const trackNotes = React.useMemo(
+    () => notes.filter((n) => n.track === activeTrack),
+    [notes, activeTrack],
+  );
+
   const noteMap = React.useMemo(() => {
     const map = new Map<string, Note>();
-    for (const n of notes) {
-      map.set(`${n.track}:${n.time}`, n);
+    for (const n of trackNotes) {
+      map.set(`${n.pitch}:${n.time}`, n);
     }
     return map;
-  }, [notes]);
+  }, [trackNotes]);
 
   const rowVirtualizer = useVirtualizer({
     count: TIME_STEPS.length,
@@ -207,25 +228,41 @@ function PianoGrid({
     overscan: 5,
   });
 
-  const snapToStep = (time: number) => Math.round(time / TIME_STEP) * TIME_STEP;
+  const playheadTop = playheadTime !== null
+    ? playheadTime * ROW_HEIGHT
+    : null;
 
   return (
     <div ref={scrollRef} className="flex-1 overflow-auto">
-      {/* Track headers (sticky top) */}
+      {/* Pitch column headers (sticky top) */}
       <div className="sticky top-0 z-20 flex">
         <div className="w-14 shrink-0 border-b border-border-grid bg-primary" />
-        {TRACKS.map((track) => (
-          <div
-            key={track}
-            className="flex h-10 min-w-[100px] flex-1 items-center justify-center border-b border-l border-border-grid bg-sidebar text-xs font-medium text-text-secondary"
-          >
-            Track {track}
-          </div>
-        ))}
+        {PITCHES.map((p) => {
+          const black = isBlackKey(p);
+          return (
+            <div
+              key={p}
+              style={{ width: COL_WIDTH, minWidth: COL_WIDTH }}
+              className={`flex h-8 items-center justify-center border-b border-l border-border-grid text-[8px] font-medium ${
+                black ? 'bg-zinc-800 text-zinc-400' : 'bg-sidebar text-text-secondary'
+              }`}
+            >
+              {pitchName(p)}
+            </div>
+          );
+        })}
       </div>
 
-      {/* Virtualized rows */}
+      {/* Virtualized time rows */}
       <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
+        {/* Playhead */}
+        {playheadTop !== null && (
+          <div
+            className="pointer-events-none absolute left-0 z-30 w-full border-t-2 border-accent-red"
+            style={{ top: playheadTop }}
+          />
+        )}
+
         {rowVirtualizer.getVirtualItems().map((virtualRow) => {
           const time = TIME_STEPS[virtualRow.index]!;
           return (
@@ -234,28 +271,37 @@ function PianoGrid({
               className="absolute left-0 flex w-full"
               style={{ top: virtualRow.start, height: ROW_HEIGHT }}
             >
-              {/* Time label (sticky left) */}
-              <div className="sticky left-0 z-10 flex w-14 shrink-0 items-center justify-end border-b border-border-grid bg-primary pr-2 text-xs text-text-secondary">
-                {time}s
+              {/* Beat label (sticky left) */}
+              <div className={`sticky left-0 z-10 flex w-14 shrink-0 items-center justify-end border-b border-border-grid pr-2 text-xs ${
+                time % 4 === 0 ? 'bg-card font-medium text-text-primary' : 'bg-primary text-text-secondary'
+              }`}>
+                {time}
               </div>
-              {/* Track cells */}
-              {TRACKS.map((track) => {
-                const note = noteMap.get(`${track}:${time}`);
+              {/* Pitch cells */}
+              {PITCHES.map((p) => {
+                const note = noteMap.get(`${p}:${time}`);
                 const isSelected = note?.id === selectedNoteId;
+                const black = isBlackKey(p);
                 return (
                   <div
-                    key={track}
-                    onClick={() => note ? onNoteClick(note) : onCellClick(track, snapToStep(time))}
-                    className="flex min-w-[100px] flex-1 cursor-pointer items-center justify-center border-b border-l border-border-grid transition-colors hover:bg-card/40"
+                    key={p}
+                    style={{ width: COL_WIDTH, minWidth: COL_WIDTH }}
+                    onClick={() => {
+                      if (note) {
+                        onNoteClick(note);
+                      } else {
+                        onCellClick(p, time);
+                      }
+                    }}
+                    className={`flex cursor-pointer items-center justify-center border-b border-l border-border-grid transition-colors hover:bg-accent-blue/10 ${
+                      black ? 'bg-zinc-900/40' : ''
+                    }`}
                   >
                     {note && (
                       <div
-                        className="h-6 w-6 rounded-full transition-shadow"
+                        className={`h-4 w-[80%] rounded-sm transition-shadow ${isSelected ? 'ring-2 ring-white' : ''}`}
                         style={{
-                          backgroundColor: note.color,
-                          boxShadow: isSelected
-                            ? `0 0 0 3px rgba(6,182,212,0.5), 0 0 12px ${note.color}`
-                            : 'none',
+                          backgroundColor: note.color ?? '#22C55E',
                         }}
                       />
                     )}
@@ -395,6 +441,10 @@ export function EditorPage() {
   const [saveStatus, setSaveStatus] = React.useState<'idle' | 'saving' | 'saved'>('idle');
   const [shareOpen, setShareOpen] = React.useState(false);
   const [createModalOpen, setCreateModalOpen] = React.useState(false);
+  const [activeTrack, setActiveTrack] = React.useState(1);
+  const [bpm, setBpm] = React.useState(120);
+  const [isPlaying, setIsPlaying] = React.useState(false);
+  const [playheadTime, setPlayheadTime] = React.useState<number | null>(null);
 
   const [undoStack, setUndoStack] = React.useState<UndoAction[]>([]);
   const [redoStack, setRedoStack] = React.useState<UndoAction[]>([]);
@@ -404,7 +454,7 @@ export function EditorPage() {
     fetchNotes(songId);
     fetchHistory(songId);
     fetchSongs();
-    return () => clearNotes();
+    return () => { clearNotes(); audioEngine.stop(); };
   }, [songId, fetchSong, fetchNotes, fetchHistory, fetchSongs, clearNotes]);
 
   React.useEffect(() => {
@@ -434,11 +484,18 @@ export function EditorPage() {
     setRedoStack([]);
   };
 
-  const handleCellClick = async (track: number, time: number) => {
-    const noteData = { track, time, title: `Note T${track}@${time}s`, color: DEFAULT_NOTE_COLOR };
+  const handleCellClick = async (pitch: number, time: number) => {
+    audioEngine.playNote(pitch);
+    const noteData = {
+      track: activeTrack,
+      pitch,
+      time,
+      title: `${pitchName(pitch)} @ beat ${time}`,
+      color: DEFAULT_NOTE_COLOR,
+    };
     await createNote(songId, noteData);
     const created = useNoteStore.getState().notes.find(
-      (n) => n.track === track && n.time === time,
+      (n) => n.track === activeTrack && n.pitch === pitch && n.time === time,
     );
     if (created) {
       pushUndo({ type: 'create', songId, noteId: created.id, before: null, after: noteData });
@@ -446,13 +503,14 @@ export function EditorPage() {
   };
 
   const handleUpdateNote = async (
-    data: { title?: string; description?: string; track?: number; time?: number; color?: string },
+    data: { title?: string; description?: string; track?: number; pitch?: number; time?: number; color?: string },
   ) => {
     if (!selectedNote) return;
     const before: Partial<Note> = {
       title: selectedNote.title,
       description: selectedNote.description ?? undefined,
       track: selectedNote.track,
+      pitch: selectedNote.pitch,
       time: selectedNote.time,
       color: selectedNote.color,
     };
@@ -469,6 +527,7 @@ export function EditorPage() {
       noteId: selectedNote.id,
       before: {
         track: selectedNote.track,
+        pitch: selectedNote.pitch,
         time: selectedNote.time,
         title: selectedNote.title,
         description: selectedNote.description ?? undefined,
@@ -527,6 +586,22 @@ export function EditorPage() {
     navigate({ to: `/songs/${song.id}` });
   };
 
+  const handlePlayStop = () => {
+    if (isPlaying) {
+      audioEngine.stop();
+      setIsPlaying(false);
+      setPlayheadTime(null);
+    } else {
+      setIsPlaying(true);
+      audioEngine.play(
+        notes,
+        bpm,
+        (t) => setPlayheadTime(t),
+        () => { setIsPlaying(false); setPlayheadTime(null); },
+      );
+    }
+  };
+
   const historyEntries: HistoryEntry[] = (history as unknown as HistoryEntry[]);
 
   return (
@@ -538,7 +613,6 @@ export function EditorPage() {
           <span className="text-sm font-black italic">AMA-MIDI</span>
         </div>
 
-        {/* Songs section */}
         <div className="px-3 pt-3">
           <p className="px-1 text-xs font-semibold uppercase tracking-wider text-text-secondary">Songs</p>
           <button
@@ -550,7 +624,6 @@ export function EditorPage() {
           </button>
         </div>
 
-        {/* Song list */}
         <div className="mt-2 flex-1 overflow-y-auto px-1">
           {songs.map((song) => (
             <button
@@ -567,12 +640,11 @@ export function EditorPage() {
                 {song.id === songId && <span className="text-xs">▶</span>}
                 <span className="truncate">{song.title}</span>
               </span>
-              <span className="ml-2 shrink-0 text-xs opacity-60">{song.noteCount ?? 0} notes</span>
+              <span className="ml-2 shrink-0 text-xs opacity-60">{song.noteCount ?? 0}</span>
             </button>
           ))}
         </div>
 
-        {/* User section */}
         <div className="border-t border-border-subtle px-3 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -598,7 +670,6 @@ export function EditorPage() {
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top toolbar */}
         <header className="flex items-center gap-4 border-b border-border-subtle px-4 py-2">
-          {/* Title + Description */}
           <div className="flex items-center gap-3">
             <input
               type="text"
@@ -614,37 +685,73 @@ export function EditorPage() {
               onChange={(e) => setDescDraft(e.target.value)}
               onBlur={handleSave}
               placeholder="Add description..."
-              className="w-60 border-none bg-transparent text-sm text-text-secondary outline-none placeholder:text-text-secondary/50 focus:ring-0"
+              className="w-48 border-none bg-transparent text-sm text-text-secondary outline-none placeholder:text-text-secondary/50 focus:ring-0"
             />
           </div>
 
-          {/* Action buttons */}
           <div className="flex items-center gap-2">
+            {/* Play / Stop */}
+            <button
+              type="button"
+              onClick={handlePlayStop}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-sm font-medium text-white transition-colors ${
+                isPlaying ? 'bg-accent-red hover:bg-red-600' : 'bg-accent-green hover:bg-green-600'
+              }`}
+            >
+              {isPlaying ? (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+                    <rect x="3" y="3" width="10" height="10" rx="1" />
+                  </svg>
+                  Stop
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+                    <path d="M4 3.5a.5.5 0 01.764-.424l8 5a.5.5 0 010 .848l-8 5A.5.5 0 014 13.5v-10z" />
+                  </svg>
+                  Play
+                </>
+              )}
+            </button>
+
+            {/* BPM */}
+            <div className="flex items-center gap-1">
+              <label htmlFor="bpm" className="text-xs text-text-secondary">BPM</label>
+              <input
+                id="bpm"
+                type="number"
+                min={40}
+                max={300}
+                value={bpm}
+                onChange={(e) => setBpm(Number(e.target.value))}
+                className="w-14 rounded border border-border-subtle bg-transparent px-1.5 py-0.5 text-center text-xs text-text-primary"
+              />
+            </div>
+
+            <div className="mx-1 h-5 w-px bg-border-subtle" />
+
+            {/* Save */}
             <button
               type="button"
               onClick={handleSave}
-              className="flex items-center gap-1 rounded-md bg-accent-green px-3 py-1 text-sm font-medium text-white transition-colors hover:bg-green-600"
+              className="flex items-center gap-1 rounded-md bg-accent-blue px-3 py-1 text-sm font-medium text-white transition-colors hover:bg-blue-600"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
-                <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" />
-              </svg>
               {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved' : 'Save'}
             </button>
 
+            {/* Share */}
             <button
               type="button"
               onClick={() => setShareOpen(true)}
               className="flex items-center gap-1 rounded-md border border-border-subtle px-3 py-1 text-sm text-text-secondary transition-colors hover:text-text-primary"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
-                <path d="M12 2a2 2 0 110 4 2 2 0 010-4zM12 10a2 2 0 110 4 2 2 0 010-4zM4 6a2 2 0 110 4 2 2 0 010-4z" />
-                <path d="M10.268 3.658L5.732 6.342m0 3.316l4.536 2.684" stroke="currentColor" strokeWidth="1" fill="none" />
-              </svg>
               Share
             </button>
 
             <div className="mx-1 h-5 w-px bg-border-subtle" />
 
+            {/* Undo / Redo */}
             <button
               type="button"
               onClick={handleUndo}
@@ -670,12 +777,7 @@ export function EditorPage() {
             </button>
           </div>
 
-          {/* Info bar */}
           <div className="ml-auto flex items-center gap-4 text-xs text-text-secondary">
-            <span>Track 1–{MAX_TRACKS}</span>
-            <span className="hidden sm:inline">|</span>
-            <span className="hidden sm:inline">0-{MAX_TIME}s</span>
-            <span className="hidden sm:inline">|</span>
             <span>{notes.length} notes</span>
             <span className="flex items-center gap-1">
               <span className="inline-block h-2 w-2 rounded-full bg-accent-green" />
@@ -684,9 +786,29 @@ export function EditorPage() {
           </div>
         </header>
 
+        {/* Track tabs */}
+        <div className="flex items-center gap-0 border-b border-border-subtle bg-sidebar px-2">
+          {TRACKS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setActiveTrack(t)}
+              className={`border-b-2 px-4 py-2 text-xs font-medium transition-colors ${
+                t === activeTrack
+                  ? 'border-accent-blue text-accent-blue'
+                  : 'border-transparent text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              Track {t}
+            </button>
+          ))}
+        </div>
+
         <PianoGrid
           notes={notes}
           selectedNoteId={selectedNote?.id ?? null}
+          activeTrack={activeTrack}
+          playheadTime={playheadTime}
           onCellClick={handleCellClick}
           onNoteClick={selectNote}
         />
