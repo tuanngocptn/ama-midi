@@ -57,8 +57,8 @@ test.describe('Songs', () => {
 
   test('filter tabs are rendered', async ({ page }) => {
     await expect(page.getByRole('button', { name: 'All Songs' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Owned' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Shared with me' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Recent' })).toBeVisible();
   });
 
   test('can close create modal by clicking Cancel', async ({ page }) => {

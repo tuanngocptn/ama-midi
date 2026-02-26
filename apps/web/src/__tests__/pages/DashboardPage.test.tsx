@@ -39,39 +39,30 @@ describe('DashboardPage', () => {
       filter: 'all',
       fetchSongs: vi.fn().mockResolvedValue(undefined),
       createSong: vi.fn().mockResolvedValue(makeSong()),
+      updateSong: vi.fn().mockResolvedValue(undefined),
+      deleteSong: vi.fn().mockResolvedValue(undefined),
       setFilter: vi.fn(),
     } as never);
   });
 
-  it('renders nav with user name and logout button', () => {
+  it('renders nav with user name', () => {
     render(<DashboardPage />);
-
     expect(screen.getByText('Alice')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Logout' })).toBeInTheDocument();
   });
 
-  it('calls logout when button clicked', async () => {
-    const logoutMock = vi.fn();
-    useAuthStore.setState({ logout: logoutMock } as never);
-
-    const user = userEvent.setup();
+  it('renders search bar', () => {
     render(<DashboardPage />);
-
-    await user.click(screen.getByRole('button', { name: 'Logout' }));
-
-    expect(logoutMock).toHaveBeenCalled();
+    expect(screen.getAllByPlaceholderText('Search songs...').length).toBeGreaterThan(0);
   });
 
   it('shows loading state', () => {
     useSongStore.setState({ isLoading: true } as never);
     render(<DashboardPage />);
-
     expect(screen.getByText(/loading songs/i)).toBeInTheDocument();
   });
 
   it('shows empty state when no songs', () => {
     render(<DashboardPage />);
-
     expect(screen.getByText('No songs yet')).toBeInTheDocument();
   });
 
@@ -100,24 +91,17 @@ describe('DashboardPage', () => {
     expect(navigateMock).toHaveBeenCalledWith({ to: '/songs/nav-song' });
   });
 
-  it('renders filter tabs', () => {
+  it('renders filter tabs matching mockup', () => {
     render(<DashboardPage />);
 
     expect(screen.getByRole('button', { name: 'All Songs' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Owned' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Shared with me' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Recent' })).toBeInTheDocument();
   });
 
-  it('calls setFilter when tab clicked', async () => {
-    const setFilterMock = vi.fn();
-    useSongStore.setState({ setFilter: setFilterMock } as never);
-
-    const user = userEvent.setup();
+  it('renders sort dropdown', () => {
     render(<DashboardPage />);
-
-    await user.click(screen.getByRole('button', { name: 'Owned' }));
-
-    expect(setFilterMock).toHaveBeenCalledWith('owned');
+    expect(screen.getByText(/sort by/i)).toBeInTheDocument();
   });
 
   it('opens create modal and submits', async () => {
@@ -145,5 +129,22 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
 
     expect(fetchSongsMock).toHaveBeenCalled();
+  });
+
+  it('filters songs by search query', async () => {
+    const songs = [
+      makeSong({ id: 's1', title: 'Boss Battle' }),
+      makeSong({ id: 's2', title: 'Menu Theme' }),
+    ];
+    useSongStore.setState({ songs } as never);
+
+    const user = userEvent.setup();
+    render(<DashboardPage />);
+
+    const searchInputs = screen.getAllByPlaceholderText('Search songs...');
+    await user.type(searchInputs[0], 'Boss');
+
+    expect(screen.getByText('Boss Battle')).toBeInTheDocument();
+    expect(screen.queryByText('Menu Theme')).not.toBeInTheDocument();
   });
 });

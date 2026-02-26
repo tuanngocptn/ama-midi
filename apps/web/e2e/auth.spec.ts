@@ -2,6 +2,10 @@ import { test, expect } from '@playwright/test';
 
 const uniqueEmail = () => `e2e-${Date.now()}@test.com`;
 
+async function openUserMenu(page: import('@playwright/test').Page) {
+  await page.locator('nav').getByText(/AL|E2|Lo|Te|Fi/i).first().click();
+}
+
 test.describe('Authentication', () => {
   test('redirects unauthenticated user to /auth', async ({ page }) => {
     await page.goto('/');
@@ -42,7 +46,6 @@ test.describe('Authentication', () => {
   test('logs in with existing account', async ({ page }) => {
     const email = uniqueEmail();
 
-    // Register first
     await page.goto('/auth');
     await page.getByRole('button', { name: 'Sign Up' }).first().click();
     await page.getByLabel('Email').fill(email);
@@ -51,7 +54,8 @@ test.describe('Authentication', () => {
     await page.locator('form').getByRole('button', { name: /sign up/i }).click();
     await expect(page.getByText('My Songs')).toBeVisible({ timeout: 10000 });
 
-    // Logout
+    // Open user menu and logout
+    await openUserMenu(page);
     await page.getByRole('button', { name: 'Logout' }).click();
     await expect(page).toHaveURL(/\/auth/);
 
@@ -84,6 +88,7 @@ test.describe('Authentication', () => {
     await page.locator('form').getByRole('button', { name: /sign up/i }).click();
     await expect(page.getByText('My Songs')).toBeVisible({ timeout: 10000 });
 
+    await openUserMenu(page);
     await page.getByRole('button', { name: 'Logout' }).click();
 
     await expect(page).toHaveURL(/\/auth/);

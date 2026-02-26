@@ -33,28 +33,25 @@ test.describe('Editor', () => {
   });
 
   test('shows song title in the toolbar', async ({ page }) => {
-    const titleInput = page.locator('input[value="Editor Test Song"]');
-    await expect(titleInput).toBeVisible();
+    const titleInput = page.locator('header input[type="text"]').first();
+    await expect(titleInput).toHaveValue('Editor Test Song');
   });
 
   test('shows note count', async ({ page }) => {
     await expect(page.getByText('0 notes')).toBeVisible();
   });
 
-  test('navigates back to dashboard', async ({ page }) => {
-    await page.getByText('← Dashboard').click();
-
-    await expect(page).toHaveURL('/');
-    await expect(page.getByText('My Songs')).toBeVisible({ timeout: 5000 });
+  test('shows Songs section in sidebar', async ({ page }) => {
+    await expect(page.getByText('Songs')).toBeVisible();
+    await expect(page.getByRole('button', { name: /new song/i })).toBeVisible();
   });
 
-  test('displays left sidebar with song info', async ({ page }) => {
-    await expect(page.getByText('Current Song')).toBeVisible();
-    await expect(page.getByText('Editor Test Song')).toBeVisible();
+  test('displays user name in sidebar', async ({ page }) => {
+    await expect(page.getByText('Editor Tester')).toBeVisible();
   });
 
   test('can edit song title via toolbar', async ({ page }) => {
-    const titleInput = page.locator('header input[type="text"]');
+    const titleInput = page.locator('header input[type="text"]').first();
     await expect(titleInput).toHaveValue('Editor Test Song');
     await titleInput.fill('Renamed Song');
     await titleInput.blur();
@@ -74,9 +71,14 @@ test.describe('Editor', () => {
     await grid.click();
     await expect(page.getByText(/[1-9]\d* notes/)).toBeVisible({ timeout: 5000 });
 
-    const noteCircle = page.locator('.rounded-full.h-5.w-5').first();
+    const noteCircle = page.locator('.rounded-full.h-6.w-6').first();
     await noteCircle.click();
 
     await expect(page.getByText('Edit Note')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('shows Save and Share buttons', async ({ page }) => {
+    await expect(page.getByRole('button', { name: /save/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /share/i })).toBeVisible();
   });
 });
