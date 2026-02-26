@@ -7,6 +7,12 @@ const windows = new Map<string, { count: number; resetAt: number }>();
 export function rateLimit(maxRequests: number, windowMs: number) {
   return createMiddleware<{ Bindings: Env; Variables: Variables }>(
     async (c, next) => {
+      const isLocal = new URL(c.req.url).hostname === 'localhost';
+      if (isLocal) {
+        await next();
+        return;
+      }
+
       const ip = c.req.header('CF-Connecting-IP') ?? 'unknown';
       const user = c.get('user' as never) as { id: string } | undefined;
       const key = user ? `user:${user.id}` : `ip:${ip}`;

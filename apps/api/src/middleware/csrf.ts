@@ -10,7 +10,9 @@ export const csrfMiddleware = createMiddleware<{ Bindings: Env }>(
   async (c, next) => {
     if (SAFE_METHODS.includes(c.req.method)) {
       const token = crypto.randomUUID();
-      c.header('Set-Cookie', `${CSRF_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Secure`);
+      const isLocal = new URL(c.req.url).hostname === 'localhost';
+      const flags = isLocal ? 'SameSite=Strict' : 'SameSite=Strict; Secure';
+      c.header('Set-Cookie', `${CSRF_COOKIE}=${token}; Path=/; ${flags}`);
       await next();
       return;
     }
