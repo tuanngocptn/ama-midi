@@ -80,6 +80,7 @@ export async function loginWith2fa(
   db: DB,
   jwtSecret: string,
   input: { email: string; password: string; code: string },
+  opts?: { devBypass?: boolean },
 ): Promise<{ token: string; user: { id: string; email: string; name: string } }> {
   const user = await db
     .select()
@@ -100,7 +101,7 @@ export async function loginWith2fa(
     throw new HTTPException(400, { message: '2FA is not enabled for this account' });
   }
 
-  const codeValid = await verifyTotp(user.totpSecret, input.code);
+  const codeValid = await verifyTotp(user.totpSecret, input.code, { devBypass: opts?.devBypass });
   if (!codeValid) {
     throw new HTTPException(401, { message: 'Invalid 2FA code' });
   }
@@ -132,13 +133,14 @@ export async function verifySetup2fa(
   db: DB,
   userId: string,
   code: string,
+  opts?: { devBypass?: boolean },
 ): Promise<void> {
   const user = await db.select().from(users).where(eq(users.id, userId)).get();
   if (!user) throw new HTTPException(404, { message: 'User not found' });
   if (!user.totpSecret) throw new HTTPException(400, { message: 'Call setup first' });
   if (user.totpEnabled) throw new HTTPException(400, { message: '2FA is already enabled' });
 
-  const valid = await verifyTotp(user.totpSecret, code);
+  const valid = await verifyTotp(user.totpSecret, code, { devBypass: opts?.devBypass });
   if (!valid) throw new HTTPException(401, { message: 'Invalid 2FA code' });
 
   await db.update(users).set({ totpEnabled: 1 }).where(eq(users.id, userId));

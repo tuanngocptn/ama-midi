@@ -11,6 +11,7 @@ export default defineWorkersConfig({
         miniflare: {
           bindings: {
             JWT_SECRET: 'test-secret-key',
+            DEV_TOTP_BYPASS: 'false',
           },
         },
       },

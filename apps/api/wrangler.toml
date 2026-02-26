@@ -5,6 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 JWT_SECRET = "change-me-in-production"
+DEV_TOTP_BYPASS = "true"
 
 [[d1_databases]]
 binding = "DB"

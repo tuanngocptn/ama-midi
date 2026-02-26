@@ -36,7 +36,8 @@ auth.post('/login', async (c) => {
 auth.post('/login/2fa', async (c) => {
   const input = login2faSchema.parse(await c.req.json());
   const db = drizzle(c.env.DB);
-  const result = await loginWith2fa(db, c.env.JWT_SECRET, input);
+  const devBypass = c.env.DEV_TOTP_BYPASS === 'true';
+  const result = await loginWith2fa(db, c.env.JWT_SECRET, input, { devBypass });
   return c.json({ data: result });
 });
 
@@ -58,7 +59,8 @@ auth.post('/2fa/setup', authMiddleware, async (c) => {
 auth.post('/2fa/verify-setup', authMiddleware, async (c) => {
   const { code } = verify2faCodeSchema.parse(await c.req.json());
   const db = drizzle(c.env.DB);
-  await verifySetup2fa(db, c.get('user').id, code);
+  const devBypass = c.env.DEV_TOTP_BYPASS === 'true';
+  await verifySetup2fa(db, c.get('user').id, code, { devBypass });
   return c.json({ data: { enabled: true } });
 });
 
