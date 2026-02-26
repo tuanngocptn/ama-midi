@@ -1,4 +1,5 @@
 import React from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { api, ApiHttpError } from '@/lib/api';
 
 type Stage = 'idle' | 'setup' | 'verify';
@@ -83,10 +84,12 @@ export function TwoFactorModal({ onClose }: { onClose: () => void }) {
         {stage === 'setup' && (
           <div className="mt-4">
             <p className="text-sm text-text-secondary">
-              Scan this URI with your authenticator app (Google Authenticator, Authy, etc.):
+              Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.):
             </p>
-            <div className="mt-2 rounded-md bg-primary p-3">
-              <p className="break-all text-xs font-mono text-text-primary">{uri}</p>
+            <div className="mt-3 flex justify-center">
+              <div className="rounded-lg bg-white p-3">
+                <QRCodeSVG value={uri} size={180} />
+              </div>
             </div>
             <div className="mt-3">
               <p className="text-xs text-text-secondary">Or enter this secret manually:</p>

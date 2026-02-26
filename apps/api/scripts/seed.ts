@@ -2,13 +2,14 @@
  * Seed script — run via: pnpm --filter @ama-midi/api db:seed
  *
  * Creates 5 users (password: Aa123@123), 50 songs, and notes.
- * Users 1 & 2 have TOTP enabled (code 000000 works locally).
+ * All users have TOTP enabled with a shared secret (code 000000 works locally).
  */
 
 import { execSync } from 'node:child_process';
 
 const API = 'http://localhost:8787/api';
 const PASSWORD = 'Aa123@123';
+const TOTP_SECRET = 'CZ3QM5LI7FB2QZJTZS6CH5KZS35W2V74';
 
 const USERS = [
   { email: 'alice@ama-midi.local', name: 'Alice Nguyen' },
@@ -194,9 +195,9 @@ async function main() {
     }
   }
 
-  // 2. Enable TOTP for users 1 & 2 (Alice & Bob)
-  console.log('\nEnabling 2FA for Alice & Bob...');
-  for (let i = 0; i < 2; i++) {
+  // 2. Enable TOTP for all users with shared secret
+  console.log(`\nEnabling 2FA for all users (secret: ${TOTP_SECRET})...`);
+  for (let i = 0; i < USERS.length; i++) {
     const auth = auths[i]!;
     try {
       await api('POST', '/auth/2fa/setup', { token: auth.token, csrf: auth.csrf });
@@ -205,9 +206,17 @@ async function main() {
         csrf: auth.csrf,
         body: { code: '000000' },
       });
-      console.log(`  ✓ ${USERS[i]!.name} — 2FA enabled (use code 000000 locally)`);
     } catch {
-      console.log(`  ⚠ ${USERS[i]!.name} — 2FA already enabled or setup failed (OK)`);
+      console.log(`  ⚠ ${USERS[i]!.name} — 2FA already enabled (OK)`);
+    }
+    try {
+      execSync(
+        `npx wrangler d1 execute ama-midi-db --local --command "UPDATE users SET totp_secret = '${TOTP_SECRET}' WHERE id = '${auth.userId}'"`,
+        { stdio: 'pipe' },
+      );
+      console.log(`  ✓ ${USERS[i]!.name} — 2FA secret set`);
+    } catch {
+      console.log(`  ⚠ ${USERS[i]!.name} — failed to set TOTP secret`);
     }
   }
 
@@ -278,7 +287,8 @@ async function main() {
   console.log('\n✅ Seed complete!');
   console.log('\nLogin credentials:');
   console.log('  Password for all users: Aa123@123');
-  console.log('  2FA code (Alice & Bob):  000000');
+  console.log(`  TOTP secret (all users): ${TOTP_SECRET}`);
+  console.log('  2FA code (local dev):    000000');
   console.log('\nUsers:');
   for (const u of USERS) {
     console.log(`  ${u.email}`);
