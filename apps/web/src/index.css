@@ -20,7 +20,7 @@
   }
 
   input, textarea, select {
-    @apply bg-input text-text-primary border border-border-subtle rounded-md px-3 py-2 outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-colors;
+    @apply w-full bg-input text-text-primary border border-border-subtle rounded-md px-3 py-2 outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue transition-colors;
   }
 }
 

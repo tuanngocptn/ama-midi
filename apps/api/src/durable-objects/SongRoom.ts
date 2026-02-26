@@ -1,13 +1,11 @@
 import type { Env } from '../types';
 
-interface Session {
-  socket: WebSocket;
+interface SessionMeta {
   userId: string;
   name: string;
 }
 
 export class SongRoom implements DurableObject {
-  private sessions: Map<WebSocket, Session> = new Map();
   private state: DurableObjectState;
 
   constructor(state: DurableObjectState, _env: Env) {
@@ -35,15 +33,10 @@ export class SongRoom implements DurableObject {
       const [client, server] = Object.values(pair);
 
       this.state.acceptWebSocket(server);
-
-      const session: Session = { socket: server, userId, name };
-      this.sessions.set(server, session);
+      server.serializeAttachment({ userId, name } satisfies SessionMeta);
 
       this.broadcast(
-        JSON.stringify({
-          type: 'user:joined',
-          data: { userId, name },
-        }),
+        JSON.stringify({ type: 'user:joined', data: { userId, name } }),
         server,
       );
 
@@ -54,36 +47,30 @@ export class SongRoom implements DurableObject {
   }
 
   async webSocketMessage(_ws: WebSocket, _message: string | ArrayBuffer) {
-    // Client messages are handled via REST API, which calls /broadcast.
+    // Note mutations go through REST API, which calls /broadcast.
   }
 
   async webSocketClose(ws: WebSocket, _code: number, _reason: string, _wasClean: boolean) {
-    const session = this.sessions.get(ws);
-    if (session) {
-      this.sessions.delete(ws);
+    const meta = ws.deserializeAttachment() as SessionMeta | null;
+    if (meta) {
       this.broadcast(
-        JSON.stringify({
-          type: 'user:left',
-          data: { userId: session.userId },
-        }),
+        JSON.stringify({ type: 'user:left', data: { userId: meta.userId } }),
       );
     }
   }
 
   async webSocketError(ws: WebSocket, _error: unknown) {
-    const session = this.sessions.get(ws);
-    if (session) {
-      this.sessions.delete(ws);
-    }
+    ws.close(1011, 'WebSocket error');
   }
 
   private broadcast(message: string, exclude?: WebSocket) {
-    for (const [socket] of this.sessions) {
-      if (socket === exclude) continue;
+    const sockets = this.state.getWebSockets();
+    for (const ws of sockets) {
+      if (ws === exclude) continue;
       try {
-        socket.send(message);
+        ws.send(message);
       } catch {
-        this.sessions.delete(socket);
+        try { ws.close(1011, 'Send failed'); } catch { /* already closed */ }
       }
     }
   }

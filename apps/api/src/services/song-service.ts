@@ -1,6 +1,6 @@
 import { eq, sql, count } from 'drizzle-orm';
 import { HTTPException } from 'hono/http-exception';
-import { songs, songCollaborators, notes } from '../db/schema';
+import { songs, songCollaborators, notes, users } from '../db/schema';
 import { checkSongAccess, getSongRole, ensureOwner } from './access-control';
 
 type DB = ReturnType<typeof import('drizzle-orm/d1').drizzle>;
@@ -56,7 +56,7 @@ export async function getSong(
   db: DB,
   songId: string,
   userId: string,
-): Promise<typeof songs.$inferSelect & { noteCount: number; collaboratorCount: number }> {
+) {
   const song = await db.select().from(songs).where(eq(songs.id, songId)).get();
   if (!song) {
     throw new HTTPException(404, { message: 'Song not found' });
@@ -73,10 +73,16 @@ export async function getSong(
     .select({ value: count() })
     .from(songCollaborators)
     .where(eq(songCollaborators.songId, songId));
+  const owner = await db
+    .select({ id: users.id, name: users.name, email: users.email })
+    .from(users)
+    .where(eq(users.id, song.ownerId))
+    .get();
   return {
     ...song,
     noteCount: noteCountResult.value,
     collaboratorCount: collabCountResult.value,
+    owner: owner ?? { id: song.ownerId, name: 'Unknown', email: '' },
   };
 }
 

@@ -402,9 +402,9 @@ export function DashboardPage() {
     <div className="flex min-h-screen flex-col bg-primary">
       {/* Navbar */}
       <nav className="flex h-14 shrink-0 items-center justify-between bg-sidebar px-6">
-        <span className="text-xl font-black italic tracking-tight text-text-primary">
+        <button type="button" onClick={() => navigate({ to: '/' })} className="text-xl font-black italic tracking-tight text-text-primary transition-opacity hover:opacity-80">
           AMA-MIDI
-        </span>
+        </button>
 
         {/* Search */}
         <div className="hidden w-full max-w-md px-8 md:block">

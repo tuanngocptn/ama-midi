@@ -108,7 +108,10 @@ export const useNoteStore = create<NoteState>((set) => ({
   applyWsMessage(msg) {
     switch (msg.type) {
       case 'note:created':
-        set((s) => ({ notes: [...s.notes, msg.data] }));
+        set((s) => {
+          if (s.notes.some((n) => n.id === msg.data.id)) return s;
+          return { notes: [...s.notes, msg.data] };
+        });
         break;
       case 'note:updated':
         set((s) => ({

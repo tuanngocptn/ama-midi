@@ -32,7 +32,7 @@ app.route('/api/songs', songsRouter);
 app.route('/api/songs', notesRouter);
 app.route('/api/songs', collaboratorsRouter);
 app.route('/api/songs', historyRouter);
-app.route('/api/songs', wsRouter);
+app.route('/api/ws', wsRouter);
 
 app.onError((err, c) => {
   if (err instanceof HTTPException) {

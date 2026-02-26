@@ -318,9 +318,11 @@ function PianoGrid({
 
 function ShareModal({
   songId,
+  owner,
   onClose,
 }: {
   songId: string;
+  owner?: { id: string; name: string; email: string };
   onClose: () => void;
 }) {
   const [collaborators, setCollaborators] = React.useState<SongCollaborator[]>([]);
@@ -383,6 +385,15 @@ function ShareModal({
         {error && <p className="mt-2 text-sm text-accent-red">{error}</p>}
 
         <div className="mt-4 flex flex-col gap-2">
+          {owner && (
+            <div className="flex items-center justify-between rounded-md bg-sidebar px-3 py-2">
+              <div>
+                <p className="text-sm text-text-primary">{owner.name}</p>
+                <p className="text-xs text-text-secondary">{owner.email}</p>
+              </div>
+              <span className="text-xs font-medium text-accent-blue">Owner</span>
+            </div>
+          )}
           {collaborators.map((c) => (
             <div key={c.id} className="flex items-center justify-between rounded-md bg-sidebar px-3 py-2">
               <div>
@@ -434,6 +445,7 @@ export function EditorPage() {
     deleteNote,
     selectNote,
     clearNotes,
+    applyWsMessage,
   } = useNoteStore();
 
   const [titleDraft, setTitleDraft] = React.useState('');
@@ -448,6 +460,7 @@ export function EditorPage() {
 
   const [undoStack, setUndoStack] = React.useState<UndoAction[]>([]);
   const [redoStack, setRedoStack] = React.useState<UndoAction[]>([]);
+  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     fetchSong(songId);
@@ -456,6 +469,40 @@ export function EditorPage() {
     fetchSongs();
     return () => { clearNotes(); audioEngine.stop(); };
   }, [songId, fetchSong, fetchNotes, fetchHistory, fetchSongs, clearNotes]);
+
+  React.useEffect(() => {
+    const token = api.getToken();
+    if (!token) return;
+
+    let alive = true;
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+
+    function connect() {
+      if (!alive) return;
+      const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+      const url = `${proto}://${window.location.host}/api/ws/${songId}/ws?token=${encodeURIComponent(token)}`;
+      ws = new WebSocket(url);
+
+      ws.addEventListener('message', (e) => {
+        try {
+          applyWsMessage(JSON.parse(e.data));
+        } catch { /* ignore malformed */ }
+      });
+
+      ws.addEventListener('close', () => {
+        if (alive) reconnectTimer = setTimeout(connect, 3000);
+      });
+    }
+
+    connect();
+
+    return () => {
+      alive = false;
+      clearTimeout(reconnectTimer);
+      ws?.close();
+    };
+  }, [songId, applyWsMessage]);
 
   React.useEffect(() => {
     if (currentSong) {
@@ -493,12 +540,18 @@ export function EditorPage() {
       title: `${pitchName(pitch)} @ beat ${time}`,
       color: DEFAULT_NOTE_COLOR,
     };
-    await createNote(songId, noteData);
-    const created = useNoteStore.getState().notes.find(
-      (n) => n.track === activeTrack && n.pitch === pitch && n.time === time,
-    );
-    if (created) {
-      pushUndo({ type: 'create', songId, noteId: created.id, before: null, after: noteData });
+    try {
+      await createNote(songId, noteData);
+      const created = useNoteStore.getState().notes.find(
+        (n) => n.track === activeTrack && n.pitch === pitch && n.time === time,
+      );
+      if (created) {
+        pushUndo({ type: 'create', songId, noteId: created.id, before: null, after: noteData });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to create note';
+      setErrorMsg(msg);
+      setTimeout(() => setErrorMsg(null), 4000);
     }
   };
 
@@ -515,8 +568,14 @@ export function EditorPage() {
       color: selectedNote.color,
     };
     pushUndo({ type: 'update', songId, noteId: selectedNote.id, before, after: data });
-    await updateNote(songId, selectedNote.id, data);
-    fetchHistory(songId);
+    try {
+      await updateNote(songId, selectedNote.id, data);
+      fetchHistory(songId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to update note';
+      setErrorMsg(msg);
+      setTimeout(() => setErrorMsg(null), 4000);
+    }
   };
 
   const handleDeleteNote = async () => {
@@ -535,9 +594,15 @@ export function EditorPage() {
       },
       after: null,
     });
-    await deleteNote(songId, selectedNote.id);
-    selectNote(null);
-    fetchHistory(songId);
+    try {
+      await deleteNote(songId, selectedNote.id);
+      selectNote(null);
+      fetchHistory(songId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete note';
+      setErrorMsg(msg);
+      setTimeout(() => setErrorMsg(null), 4000);
+    }
   };
 
   const handleUndo = async () => {
@@ -608,10 +673,14 @@ export function EditorPage() {
     <div className="flex h-screen bg-primary text-text-primary">
       {/* Left sidebar */}
       <aside className="flex w-52 shrink-0 flex-col border-r border-border-subtle bg-sidebar">
-        <div className="flex items-center gap-2 border-b border-border-subtle px-4 py-3">
+        <button
+          type="button"
+          onClick={() => navigate({ to: '/' })}
+          className="flex items-center gap-2 border-b border-border-subtle px-4 py-3 transition-colors hover:bg-card"
+        >
           <span className="text-lg text-accent-blue">♪</span>
           <span className="text-sm font-black italic">AMA-MIDI</span>
-        </div>
+        </button>
 
         <div className="px-3 pt-3">
           <p className="px-1 text-xs font-semibold uppercase tracking-wider text-text-secondary">Songs</p>
@@ -786,6 +855,14 @@ export function EditorPage() {
           </div>
         </header>
 
+        {/* Error banner */}
+        {errorMsg && (
+          <div className="flex items-center justify-between bg-accent-red/20 px-4 py-1.5 text-sm text-accent-red">
+            <span>{errorMsg}</span>
+            <button type="button" onClick={() => setErrorMsg(null)} className="ml-4 font-bold">x</button>
+          </div>
+        )}
+
         {/* Track tabs */}
         <div className="flex items-center gap-0 border-b border-border-subtle bg-sidebar px-2">
           {TRACKS.map((t) => (
@@ -825,7 +902,7 @@ export function EditorPage() {
       )}
 
       {/* Modals */}
-      {shareOpen && <ShareModal songId={songId} onClose={() => setShareOpen(false)} />}
+      {shareOpen && <ShareModal songId={songId} owner={currentSong?.owner} onClose={() => setShareOpen(false)} />}
       {createModalOpen && <CreateSongModal onClose={() => setCreateModalOpen(false)} onSubmit={handleCreateSong} />}
     </div>
   );

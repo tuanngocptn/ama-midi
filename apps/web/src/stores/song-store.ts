@@ -7,6 +7,7 @@ type SongFilter = 'all' | 'owned' | 'shared';
 interface SongDetail extends Song {
   noteCount: number;
   collaboratorCount: number;
+  owner?: { id: string; name: string; email: string };
 }
 
 interface SongState {
