@@ -1,0 +1,10 @@
+{
+  "name": "@ama-midi/web",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "echo 'web placeholder - to be set up later'",
+    "build": "echo 'web placeholder'",
+    "typecheck": "echo 'web placeholder'"
+  }
+}

@@ -1,0 +1,22 @@
+name = "ama-midi-api"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+JWT_SECRET = "change-me-in-production"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ama-midi-db"
+database_id = "local"
+migrations_dir = "drizzle"
+
+[durable_objects]
+bindings = [
+  { name = "SONG_ROOM", class_name = "SongRoom" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["SongRoom"]

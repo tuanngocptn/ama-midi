@@ -22,12 +22,25 @@ alwaysApply: false
 - Keep components small; extract sub-components when > 100 lines
 - Use Zustand stores in `stores/` -- one store per domain (songs, notes, auth, ws)
 
-## Hono (apps/api)
+## Hono API (apps/api) -- Route / Service Split
 
+Routes are thin controllers. Business logic lives in services.
+
+```
+src/
+  routes/          Thin controllers: parse input, call service, return JSON
+  services/        Business logic: DB queries, access checks, error throwing
+  middleware/      Auth, CSRF, rate limiting
+  lib/             Utilities: JWT, password hashing
+  db/              Drizzle schema
+  durable-objects/ Durable Object classes
+```
+
+- **Routes**: Parse request (Zod), call service, return `{ data: T }` or let error handler catch
+- **Services**: Pure business logic, receive `db: DB` as first arg, throw `HTTPException` on errors
+- **Access control**: Shared in `services/access-control.ts` (ensureAccess, ensureEditorAccess, ensureOwner)
 - Group routes with `app.route('/prefix', subApp)`
-- Middleware as separate files in `middleware/` folder
-- Access D1 and DO bindings via `c.env` (typed via `Env` interface in `types.ts`)
-- Always validate request body with Zod before processing
+- Always validate request body with Zod in the route before calling the service
 - Return consistent JSON: `{ data: T }` on success, `{ error: string, code: string }` on failure
 
 ## Naming
