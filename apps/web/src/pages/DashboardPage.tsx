@@ -108,30 +108,21 @@ function UserAvatar({ name }: { name: string }) {
   );
 }
 
-function SongThumbnail({ songId, noteCount }: { songId: string; noteCount: number }) {
+function SongThumbnail({ preview }: { preview?: { pitch: number; time: number; color: string }[] }) {
   const dots = React.useMemo(() => {
-    let hash = 0;
-    for (let i = 0; i < songId.length; i++) {
-      hash = (hash * 31 + songId.charCodeAt(i)) | 0;
-    }
-    const colors = ['#3B82F6', '#EF4444', '#22C55E', '#A855F7', '#EAB308', '#EC4899', '#06B6D4', '#F97316'];
-    const count = Math.min(Math.max(noteCount, 3), 20);
-    const result: { cx: number; cy: number; color: string }[] = [];
-    for (let i = 0; i < count; i++) {
-      hash = (hash * 1103515245 + 12345) | 0;
-      const cx = 10 + (Math.abs(hash) % 280);
-      hash = (hash * 1103515245 + 12345) | 0;
-      const cy = 8 + (Math.abs(hash) % 64);
-      hash = (hash * 1103515245 + 12345) | 0;
-      const color = colors[Math.abs(hash) % colors.length] ?? '#3B82F6';
-      result.push({ cx, cy, color });
-    }
-    return result;
-  }, [songId, noteCount]);
+    if (!preview || preview.length === 0) return [];
+    const minTime = Math.min(...preview.map((n) => n.time));
+    const maxTime = Math.max(...preview.map((n) => n.time));
+    const timeRange = maxTime - minTime || 1;
+    return preview.map((n) => ({
+      cx: 10 + ((n.time - minTime) / timeRange) * 280,
+      cy: 75 - (n.pitch / 87) * 70,
+      color: n.color,
+    }));
+  }, [preview]);
 
   return (
     <svg viewBox="0 0 300 80" className="h-full w-full" preserveAspectRatio="none">
-      {/* Grid lines */}
       {[0, 37.5, 75, 112.5, 150, 187.5, 225, 262.5].map((x) => (
         <line key={x} x1={x} y1="0" x2={x} y2="80" stroke="#374151" strokeWidth="0.5" />
       ))}
@@ -139,17 +130,8 @@ function SongThumbnail({ songId, noteCount }: { songId: string; noteCount: numbe
         <line key={y} x1="0" y1={y} x2="300" y2={y} stroke="#374151" strokeWidth="0.5" />
       ))}
       {dots.map((d, i) => (
-        <circle key={i} cx={d.cx} cy={d.cy} r="3.5" fill={d.color} opacity="0.85" />
+        <circle key={i} cx={d.cx} cy={d.cy} r="3" fill={d.color} opacity="0.85" />
       ))}
-      {dots.length > 2 && (
-        <polyline
-          points={dots.map((d) => `${d.cx},${d.cy}`).join(' ')}
-          fill="none"
-          stroke="#3B82F6"
-          strokeWidth="0.8"
-          opacity="0.3"
-        />
-      )}
     </svg>
   );
 }
@@ -183,7 +165,7 @@ function SongCard({
     <div className="group relative flex w-full cursor-pointer flex-col rounded-lg bg-card transition-shadow hover:ring-1 hover:ring-accent-blue">
       {/* Thumbnail */}
       <div className="relative h-[100px] overflow-hidden rounded-t-lg bg-primary/50" onClick={onClick}>
-        <SongThumbnail songId={song.id} noteCount={song.noteCount ?? 0} />
+        <SongThumbnail preview={song.notePreview} />
         {/* Three-dot menu */}
         <div ref={menuRef} className="absolute right-2 top-2">
           <button
@@ -222,8 +204,8 @@ function SongCard({
           <p className="mt-1 truncate text-sm text-text-secondary">{song.description}</p>
         )}
         <div className="mt-auto flex items-center gap-4 pt-3 text-xs text-text-secondary">
-          <span className="flex items-center gap-1"><NoteIcon /> {song.noteCount ?? 0} notes</span>
-          <span className="flex items-center gap-1"><UsersIcon /> {song.collaboratorCount ?? 0} collaborators</span>
+          <span className="flex items-center gap-1"><NoteIcon /> {song.noteCount ?? 0}</span>
+          <span className="flex items-center gap-1"><UsersIcon /> {song.collaboratorCount ?? 0}</span>
           <span className="ml-auto flex items-center gap-1"><ClockIcon /> {formatDate(song.updatedAt)}</span>
         </div>
       </div>

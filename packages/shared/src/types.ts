@@ -14,6 +14,7 @@ export interface Song {
   updatedAt: string;
   noteCount?: number;
   collaboratorCount?: number;
+  notePreview?: { pitch: number; time: number; color: string }[];
 }
 
 export interface Note {

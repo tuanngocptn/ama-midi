@@ -49,6 +49,20 @@ export async function listSongs(
     .where(sql`${songCollaborators.songId} IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`)
     .groupBy(songCollaborators.songId);
 
+  const previewNotes = await db
+    .select({ songId: notes.songId, pitch: notes.pitch, time: notes.time, color: notes.color })
+    .from(notes)
+    .where(sql`${notes.songId} IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`)
+    .orderBy(notes.time)
+    .limit(ids.length * 30);
+
+  const previewMap = new Map<string, { pitch: number; time: number; color: string }[]>();
+  for (const n of previewNotes) {
+    let arr = previewMap.get(n.songId);
+    if (!arr) { arr = []; previewMap.set(n.songId, arr); }
+    if (arr.length < 30) arr.push({ pitch: n.pitch, time: n.time, color: n.color });
+  }
+
   const noteMap = new Map(noteCounts.map((r) => [r.songId, r.value]));
   const collabMap = new Map(collabCounts.map((r) => [r.songId, r.value]));
 
@@ -56,6 +70,7 @@ export async function listSongs(
     ...s,
     noteCount: noteMap.get(s.id) ?? 0,
     collaboratorCount: collabMap.get(s.id) ?? 0,
+    notePreview: previewMap.get(s.id) ?? [],
   }));
 }
 
